@@ -1,8 +1,6 @@
-# Dependencies
-.psci_modules
-bower_components
-node_modules
-
-# Generated files
-.psci
-output
+**/__pycache__/
+*.pyc
+**/*~
+**/#*#
+install
+src/install
