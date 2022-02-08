@@ -1,4 +1,69 @@
-# FvwmPy -- interface for developing FVWM modules in python
+# FvwmPy -- framework for developing FVWM modules in python
+
+This module defines class `fvwmpy`, that can be used by itself or as a
+base for derived classes for writing FVWM modules.  
+
+##### Constants
+
+- `fvwmpy.C_*`
+  These constants refer to FVWM decoration contexts.
+  See [FVWM module
+  interface](https://www.fvwm.org/Archive/ModuleInterface/) for the complete 
+  list and definitions. 
+
+- `fvwmpy.contextnames`
+  A dictionary with keys being contexts, and values -- character strings
+  containing the names of the corresponding context.
+
+- `fvwmpy.contextcodes`
+  The inverse of the `fvwmpy.contextnames` dictionary.
+
+- `fvwmpy.M[X]_*`
+  Types of packets send from FVWM to the module. See [FVWM module
+  interface](https://www.fvwm.org/Archive/ModuleInterface/) for details.
+  
+- `fvwmpy.M_ALL`
+  Mask matching all packets
+
+- `fvwmpy.M_FOR_WINLIST`
+  Mask matching all packets that are sent after `Send_WindowList`
+  command is received by FVWM.
+
+- `fvwmpy.M_FOR_CONFIG`
+  Mask matching all packets that are sent after `Send_ConfigInfo`
+  command is received by FVWM.
+
+- `fvwmpy.packetnames`
+  Dictionary for converting packet types to their names.
+  E.g. fvwmpy.packetnames[MX_LEAVE_WINDOW] = "MX_LEAVE_WINDOW"
+
+- `fvwmpy.packetcodes`
+  The inverse dictionary of `fvwmpy.packetnames`
+
+- `fvwmpy.FVWM_PACK_START` and `fvwmpy.FVWM_PACK_START_b`
+  Delimiter used by FVWM at the start of each packet.
+  `FVWM_PACK_START` is an integer and `FVWM_PACK_START_b` is its
+  `bytearray` representation.
+
+- `fvwmpy.NOT_FINISHED` and `fvwmpy.NOT_FINISHED`
+  `bytearray`s containing tags to be sent to FVWM at the end of every
+  message to notify whether module intends to continue of finished
+  working.
+
+- `fvwmpy.LONG_SIZE`
+  Integer. The size of C's long in bytes.
+
+- `FVWM_STR_CODEX`
+  String. Codex for en/de-coding strings during communication with FVWM.
+
+##### Helper functions
+
+- `split_mask(int: mask)`
+  Returns a tuple of packet types, that match the given mask.
+  If all the packet types in the list are bitwise `or`ed, one gets the
+  `mask` back.
+
+
 
 fvwmpy(
 

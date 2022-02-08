@@ -81,17 +81,6 @@ MX_REPLY               	= (1 << 36 )
 
 M_UNKNOWN1              = (1 << 37 )
 
-M_DEFAULT_MASK = ( M_NEW_PAGE | M_NEW_DESK | M_RAISE_WINDOW | M_LOWER_WINDOW |
-                   M_FOCUS_CHANGE | M_DESTROY_WINDOW | M_ICONIFY |
-                   M_DEICONIFY | M_WINDOW_NAME | M_ICON_NAME | M_RES_CLASS |
-                   M_RES_NAME | M_ICON_LOCATION | M_MAP | M_ERROR |
-                   M_ICON_FILE | M_DEFAULTICON | M_STRING | M_MINI_ICON |
-                   M_WINDOWSHADE | M_DEWINDOWSHADE | M_VISIBLE_NAME |
-                   M_RESTACK | M_ADD_WINDOW | M_CONFIGURE_WINDOW |
-                   M_SENDCONFIG | M_CONFIG_INFO | MX_VISIBLE_ICON_NAME |
-                   MX_ENTER_WINDOW |
-                   MX_PROPERTY_CHANGE | MX_LEAVE_WINDOW | MX_REPLY )
-
 M_ALL = ((1<<37)-1)
 
 ### These are packets that are sent when window list is requested
