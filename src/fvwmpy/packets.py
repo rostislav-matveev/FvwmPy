@@ -162,12 +162,10 @@ class _packet(dict):
         MX_PROPERTY_CHANGE:
                           ( ("prop_type", "L"), ("val_1", "L"), ("val_2", "L"),
                             ("prop_str", "string") ),
-        MX_REPLY:         _wid + ("string", "string"),
-        M_UNKNOWN:        ( ("body", "raw"), )
+        MX_REPLY:         _wid + ( ("string", "string"), ),
+        M_UNKNOWN1:        ( ("body", "raw"), )
         }
 
-    _L = struct.calcsize("L")
-    
     def __init__(self,buf,parse,raw):
         """
         Read the packet from buf. If parse==True, parse the packet and 
@@ -175,9 +173,8 @@ class _packet(dict):
         If raw==True, store the raw bytearray in p["raw"].  
         """
         try:
-            (start,ptype,size,time) = struct.unpack_from( "4L",
-                                                      buf.read(self._L*4),
-                                                      0)
+            (start,ptype,size,time) = struct.unpack_from(
+                "4L", buf.read(LONG_SIZE*4), 0 )
         except struct.error:
             raise PipeDesync()
         if start != FVWM_PACK_START:
@@ -198,7 +195,7 @@ class _packet(dict):
         ### Read and parse the rest of the packet according to the format
         ### corresponding to the type of the packet
         fmt = self._packetformats[self.ptype]
-        body = buf.read(self._L*(size-4))
+        body = buf.read(LONG_SIZE * (size-4))
         if raw: self.raw = body
         if not parse: return 
         offset = 0
@@ -222,14 +219,20 @@ class _packet(dict):
                     self[field[0]].append(_unpack(field[2],body,offset)) 
                     offset += itemsize
                 if offset != len(body):
-                    raise PipeDesync("Format doesn't match the body of\
-                    the packet (while reading 'listof' format)")
+                    raise PipeDesync(
+                        """While parsing packet {}:
+                        Format doesn't match the body of the packet 
+                        (while reading 'listof' format)
+                        """.format(packetnames[self.ptype]))
             else:
                 try:
                     self[field[0]] = _unpack(field[1], body, offset)
                 except struct.error:
-                    raise PipeDesync("Format doesn't match the body of\
-                    the packet (body of the packet is too short)")
+                    raise PipeDesync(
+                        """While parsing packet {}:
+                        Format doesn't match the body of the packet 
+                        (body of the packet is too short)
+                        """.format(packetnames[self.ptype]))
                 offset += struct.calcsize( field[1] )
             ### There are variable length packs with optional fields at
             ### the end, like M_ICONIFY, so we break if the body of the pack

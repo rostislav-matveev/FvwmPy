@@ -1,3 +1,5 @@
+import struct as _struct
+
 ################################################################################
 ### FVWM contexts
 
@@ -77,7 +79,7 @@ MX_LEAVE_WINDOW        	= (1 << 34 )
 MX_PROPERTY_CHANGE      = (1 << 35 )
 MX_REPLY               	= (1 << 36 )
 
-M_UNKNOWN               = (1 << 37 )
+M_UNKNOWN1              = (1 << 37 )
 
 M_DEFAULT_MASK = ( M_NEW_PAGE | M_NEW_DESK | M_RAISE_WINDOW | M_LOWER_WINDOW |
                    M_FOCUS_CHANGE | M_DESTROY_WINDOW | M_ICONIFY |
@@ -112,16 +114,24 @@ packets = { "M_NEW_PAGE", "M_NEW_DESK", "M_OLD_ADD_WINDOW", "M_RAISE_WINDOW",
             "M_VISIBLE_NAME", "M_SENDCONFIG", "M_RESTACK", "M_ADD_WINDOW",
             "M_CONFIGURE_WINDOW", "M_EXTENDED_MSG", "MX_VISIBLE_ICON_NAME",
             "MX_ENTER_WINDOW", "MX_LEAVE_WINDOW", "MX_PROPERTY_CHANGE",
-            "MX_REPLY", "M_UNKNOWN" }
+            "MX_REPLY", "M_UNKNOWN1" }
 
 ### get the name of the packet from value
 packetnames = { globals()[k] : k for k in packets }
 packetcodes = { k : globals()[k] for k in packets }
 del packets
 
+#################################################################
+### communication with FVWM
 ### First word in packets sent from FVWM.
-FVWM_PACK_START            = int("0xffffffff",0)
+FVWM_PACK_START    = int("0xffffffff",0)
+FVWM_PACK_START_b  = _struct.pack("L",FVWM_PACK_START)
 
-### This is used for encoding strings sent to fvwm
+NOT_FINISHED       = _struct.pack("L",1)
+FINISHED           = _struct.pack("L",0)
+
+LONG_SIZE          = _struct.calcsize("L")
+
+### This is used for encoding/decoding strings sent to/from fvwm
 #FVWM_STR_CODEX             = "ascii"
-FVWM_STR_CODEX             = "utf8"
+FVWM_STR_CODEX     = "utf8"

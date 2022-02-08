@@ -1,5 +1,42 @@
-FvwmPy -- base class for deriving module classes.
-Instance (inst) of the class has the following attributes:
+# FvwmPy -- interface for developing FVWM modules in python
+
+fvwmpy(
+
+
+
+Constants:
+C_*
+FINISHED
+NOT_FINISHED
+FVWM_PACK_START
+FVWM_PACK_START_b
+FVWM_STR_CODEX
+M[X]_*
+LONG_SIZE
+contextcodes
+contextnames
+packetcodes
+packetnames
+
+Exceptions:
+
+FvwmPyException
+FvwmLaunch
+IllegalOp
+PipeDesync
+
+Logging functions:
+crit(
+dbg(
+err(
+info(
+warn(
+
+
+helpers:
+split_mask(
+
+
 
 me                   -- the name of the executable file
 alias 		     -- alias of the module. Initially set to be equal to
