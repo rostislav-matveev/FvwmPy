@@ -5,7 +5,8 @@ base for derived classes for writing FVWM modules.
 
 ##### Constants
 
-- `fvwmpy.C_*`
+- **`fvwmpy.C_*`**
+
   These constants refer to FVWM decoration contexts.
   See [FVWM module
   interface](https://www.fvwm.org/Archive/ModuleInterface/) for the complete 
@@ -58,7 +59,7 @@ base for derived classes for writing FVWM modules.
 
 ##### Helper functions
 
-- `split_mask(int: mask)`
+- **`split_mask(mask)`**
   Returns a tuple of packet types, that match the given mask.
   If all the packet types in the list are bitwise `or`ed, one gets the
   `mask` back.
