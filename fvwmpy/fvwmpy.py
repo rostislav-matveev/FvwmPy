@@ -43,6 +43,7 @@ warn = _l.warning
 err  = _l.error
 crit = _l.critical
 
+VERSION = "0.0.1"
 ################################################################################
 
 class _fvwmvar:
@@ -69,10 +70,10 @@ class _fvwmvar:
         return p["string"]
 
     def __setattr__(self,var,val):
-        raise IllegalOp("It is not possible to assign to Fvwm variables")
+        raise IllegalOperation("It is not possible to assign to Fvwm variables")
 
     def __delattr__(self,var):
-        raise IllegalOp("It is not possible to delete Fvwm variables")
+        raise IllegalOperation("It is not possible to delete Fvwm variables")
 
     def __call__(self, *args,context_window=None):
         vardots = ["$[{}]".format(x.replace("_",".")) for x in args]
@@ -279,7 +280,7 @@ class fvwmpy:
                                           FINISHED) ) )
         self._tofvwm.flush()
         
-    def packet(self, parse=True, raw=False, no_handlers = False):
+    def packet(self, parse=True, raw=False, apply_handlers = True):
         """
         M.packet(parse=True, raw=False, no_handlers = False)
 
@@ -291,7 +292,7 @@ class fvwmpy:
         And adding raw(?) content to the "raw" field.
         """
         p = _packet(self._fromfvwm, parse=parse, raw=raw)
-        if not no_handlers:
+        if apply_handlers:
             for h in self.handlers[p.ptype]:
                 h(p)
         return p
@@ -374,35 +375,37 @@ class fvwmpy:
     @nograbmask.setter
     def nograbmask(self,m):
         self._nograbmask_set(m)
-    
-    def getconfig(self,match=None, merge = False):
-        savemask       = self.mask
-        savesyncmask   = self.syncmask
-        savenograbmask = self.syncmask
-        self.mask        = M_FOR_CONFIG | M_ERROR
-        self.syncmask    = 0
-        self.nograbmask  = 0
+
+    def push_masks(self,mask,syncmask,nograbmask):
+        self.mask_stack.append( (self.mask,self.syncmask,self.nograbmask) )
+        self.mask, self.syncmask, self.nograbmask = (mask,syncmask,nograbmask)
+
+    def restore_masks(self):
+        try:
+           self.mask, self.syncmask, self.nograbmask = self.mask_stack.pop() 
+        except IndexError:
+            raise IllegalOperation("Can not restore masks. Mask stack is empty")
+        
+    def getconfig(self,
+                  handler=self.h_saveconfig,
+                  apply_other_handlers = True,
+                  match=None):
+        self.push_masks( M_FOR_CONFIG | M_ERROR, 0, 0)
         if match is None:
             match = "*" + self.alias
-        if not merge:
+        if handler == self.h_saveconfig:
             self.config = _config()
-        hmask = self.registered_handler(self.h_saveconfig)
-        self.register_handler(M_FOR_CONFIG, self.h_saveconfig)
         try:
             self.sendmessage("Send_ConfigInfo {}".format(match))            
             while True:
-                p = self.packet()
+                p = self.packet(apply_handlers = apply_other_handlers)
+                handler(p)
                 if p.ptype == M_END_CONFIG_INFO: break
         except Exception as e:
             raise e
         finally:
-            ### restore state 
-            for m in split_mask(M_FOR_CONFIG):
-                if not m & hmask:
-                    self.unregister_handler(m, self.h_saveconfig)
-            self.nograbmask = savenograbmask
-            self.syncmask = savesyncmask
-            self.mask = savemask
+            ### restore masks
+            self.pull_masks()
             
     def getwinlist(self):
         savemask       = self.mask

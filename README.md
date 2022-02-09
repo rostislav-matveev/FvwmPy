@@ -1,9 +1,75 @@
-# FvwmPy -- framework for developing FVWM modules in python
+# fvwmpy -- framework for developing FVWM modules in python
 
 This module defines class `fvwmpy`, that can be used by itself or as a
 base for derived classes for writing FVWM modules.  
 
-##### Constants
+A typical example of a module using fvwmpy may look along the following lines
+```
+#!/usr/bin/python3
+import fvwmpy
+
+class mymodule(fvwmpy):
+    def h_conf(self,pack):
+        ### process config lines from FVWM database
+	
+    def h_handler1(self,pack):
+        ### respond to the pack
+
+    def h_handler2(self,pack):
+        ### respond to the pack
+    ...
+    
+m = mymodule()
+
+### Keep FVWM mute while we setting things up
+m.mask       = 0
+m.syncmask   = 0
+m.nograbmask = 0
+
+### Check command line args
+for arg in m.args:
+   ### process arg
+
+### Read FVWM's database of module config lines and parse them
+### using `m.h_config` handler
+m.getconfig(m.h_config, apply_other_handlers = False)
+
+### Register handlers
+m.register_handler(mask1,m.h_handler1)
+m.register_handler(mask2,m.h_handler2)
+...
+
+### Tell FVWM that we are ready
+m.finishedconfig()
+
+### set masks
+m.mask       = <some mask>
+m.syncmask   = <some smask>
+m.nograbmask = <some ngmask>
+
+### If we want to dynamically update configuration:
+m.register_handler(M_SENDCONFIG, m.h_config)
+m.mask |= fvwmpy.M_SENDCONFIG
+### If we want FVWM to wait while we update config
+### (in that case m.h_config has to contain the line
+###   `self.unlock()` at the end, to let FVWM know that it has finished.)
+m.syncmask |= fvwmpy.M_SENDCONFIG
+
+### Do some other stuff
+
+### If the module is persistent (listens to FVWM and executes handlers)
+m.run()
+### otherwise
+m.exit()
+```
+
+
+## License
+This module is released under GPLv3 license.
+
+## Structure of the module
+
+### Constants
 
 - **`fvwmpy.C_*`**
 
@@ -12,109 +78,135 @@ base for derived classes for writing FVWM modules.
   interface](https://www.fvwm.org/Archive/ModuleInterface/) for the complete 
   list and definitions. 
 
-- `fvwmpy.contextnames`
+- **`fvwmpy.contextnames`**
+
   A dictionary with keys being contexts, and values -- character strings
   containing the names of the corresponding context.
 
-- `fvwmpy.contextcodes`
+- **`fvwmpy.contextcodes`**
+
   The inverse of the `fvwmpy.contextnames` dictionary.
 
-- `fvwmpy.M[X]_*`
+- **`fvwmpy.M[X]_*`**
+
   Types of packets send from FVWM to the module. See [FVWM module
   interface](https://www.fvwm.org/Archive/ModuleInterface/) for details.
-  
-- `fvwmpy.M_ALL`
-  Mask matching all packets
+  In addition there are following masks: `fvwmpy.M_ALL` -- matches all
+  packet types;   `fvwmpy.M_FOR_WINLIST` -- matches packets emmited by
+  FVWM during response to *Send_WindowList* command;
+  `fvwmpy.M_FOR_CONFIG` -- mask matching all packets emmited by
+  FVWM in response to *Send_ConfigInfo* command.
 
-- `fvwmpy.M_FOR_WINLIST`
-  Mask matching all packets that are sent after `Send_WindowList`
-  command is received by FVWM.
+- **`fvwmpy.packetnames`**
 
-- `fvwmpy.M_FOR_CONFIG`
-  Mask matching all packets that are sent after `Send_ConfigInfo`
-  command is received by FVWM.
-
-- `fvwmpy.packetnames`
   Dictionary for converting packet types to their names.
   E.g. fvwmpy.packetnames[MX_LEAVE_WINDOW] = "MX_LEAVE_WINDOW"
 
-- `fvwmpy.packetcodes`
+- **`fvwmpy.packetcodes`**
+
   The inverse dictionary of `fvwmpy.packetnames`
 
-- `fvwmpy.FVWM_PACK_START` and `fvwmpy.FVWM_PACK_START_b`
+- **`fvwmpy.FVWM_PACK_START`** and **`fvwmpy.FVWM_PACK_START_b`**
+
   Delimiter used by FVWM at the start of each packet.
   `FVWM_PACK_START` is an integer and `FVWM_PACK_START_b` is its
   `bytearray` representation.
 
-- `fvwmpy.NOT_FINISHED` and `fvwmpy.NOT_FINISHED`
+- **`fvwmpy.NOT_FINISHED`** and **`fvwmpy.NOT_FINISHED`**
   `bytearray`s containing tags to be sent to FVWM at the end of every
   message to notify whether module intends to continue of finished
   working.
 
-- `fvwmpy.LONG_SIZE`
+- **`fvwmpy.LONG_SIZE`**
+
   Integer. The size of C's long in bytes.
 
-- `FVWM_STR_CODEX`
+- **`fvwmpy.FVWM_STR_CODEX`**
+
   String. Codex for en/de-coding strings during communication with FVWM.
 
-##### Helper functions
+- **`fvwmpy.VERSION`**
+  String.
+  
+### Helper functions
 
 - **`split_mask(mask)`**
+
   Returns a tuple of packet types, that match the given mask.
   If all the packet types in the list are bitwise `or`ed, one gets the
   `mask` back.
 
+- **`crit()`**, **`dbg()`**, **`err()`**, **`info()`**, **`warn()`**
+
+  Logging functions. They should be called
+
+  `fcn(message_string, arguments)`
+
+  and use `str.format(arguments)` formatting paradigm. Instances of
+  `fvwmpy` class have their own similar logging functions.
+  
+  
+### Exceptions
+
+- **`FvwmPyException`**
+
+  Base exception from which others are derived.
+
+- **`FvwmLaunch`**
+
+  This exception is raised when the module can not start up normally,
+  e.g it is not executed by FVWM, pipes can not be opened, etc.
+
+- **`IllegalOperation`**
+
+  raised when one trying restore masks without saving them first, etc.
+  It is also raised when one attempts to assign to FVWM variables (not
+  infostore) or when FVWM does not understand communication from the
+  module.
+
+- **`PipeDesync`**
+
+  This exception is raised if pipe desyncronization is detected,
+  e.g. when the packet from FVWM does not have begin-tag or when the
+  content of the packet does not match its format.
+  Instance of fvwmpy class has method `fvwmpy.resync()` to seek the
+  stream to the next pack.
 
 
-fvwmpy(
+### Class fvwmpy
 
+`m=fvwmpy()`
 
+Instances of `fvwmpy` have the following attributes and methods
 
-Constants:
-C_*
-FINISHED
-NOT_FINISHED
-FVWM_PACK_START
-FVWM_PACK_START_b
-FVWM_STR_CODEX
-M[X]_*
-LONG_SIZE
-contextcodes
-contextnames
-packetcodes
-packetnames
+- **`m.me`**
 
-Exceptions:
+  String. The name of the executable file containing the module
 
-FvwmPyException
-FvwmLaunch
-IllegalOp
-PipeDesync
+- **`m.alias`**
 
-Logging functions:
-crit(
-dbg(
-err(
-info(
-warn(
+  String. Alias of the module. Initially is equal to `m.me`.
+  It can be changed, e.g. upon processing command line arguments.
+  It is used in logging functions, and for filtering config lines.
 
+- **`m.mask`**
 
-helpers:
-split_mask(
+  Integer. Mask for communication from FVWM. The mask control what
+  kind of packets FVWM sends to the module. The normal and extended (bits
+  higher then 32) masks are treated the same. If you update the value
+  of the mask attribute it will be split into normal and extended
+  parts and sent to fvwm automatically, if the new value is different
+  from the old. See `fvwmpy.M[X]_*` constants. See also `m.push_masks(...)`
+  and `m.pull_masks()` methods for temporarily changing masks.
+  See [FVWM module
+  interface](https://www.fvwm.org/Archive/ModuleInterface/) for
+  explanation of the concepts.
+  
+- **`m.syncmask`** and **`m.nograbmask`**
 
-
-
-me                   -- the name of the executable file
-alias 		     -- alias of the module. Initially set to be equal to
-		        inst.me. You may change it upon processing
-			command line arguments.
-mask    	     -- mask for messages from fvwm. The normal and
-       		        extended (bits higher then 32) masks are
-			treated the same. If you
-			set the mask it will be split and sent to fvwm
-			automatically. See M_* and MX_* constants.
-syncmask             -- The same for sync- and nograb- masks
-nograbmask
+  are similar to `m.mask` but contain values of syncmask and nograb
+  masks.
+  
 
 tofvwm,fromfvwm      -- pipes for communicating with fvwm
 
