@@ -99,8 +99,8 @@ class _packet(dict):
                      ( "icon_w", "L" ), 
                      ( "icon_pixmap_w", "L" ), 
                      ( "hints_win_gravity", "L" ), 
-                     ( "TextPixel", "L" ), 
-                     ( "BackPixel", "L" ), 
+                     ( "text_pixel", "L" ), 
+                     ( "back_pixel", "L" ), 
                      ( "ewmh_hint_layer", "L" ), 
                      ( "ewmh_hint_desktop", "L" ), 
                      ( "ewmh_window_type", "L" ), 
@@ -191,7 +191,6 @@ class _packet(dict):
         _dbgprint(packetnames[self.ptype])
         _dbgprint(size)
         
-
         ### Read and parse the rest of the packet according to the format
         ### corresponding to the type of the packet
         fmt = self._packetformats[self.ptype]
@@ -250,6 +249,12 @@ class _packet(dict):
         "Return the string containing packet name, as defined in FVWM source"
         return packetnames[self.ptype]
     
+    def __getattr__(self,attr):
+        return self[attr]
+
+    def __setattr__(self,attr,val):
+        self[attr] = val
+
     def __str__(self):
         (s, ms) = divmod(self.time,1000)
         t = _time.localtime(s)

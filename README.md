@@ -9,8 +9,10 @@ A typical example of a module using fvwmpy may look along the following lines
 import fvwmpy
 
 class mymodule(fvwmpy):
-    def h_conf(self,pack):
+    def h_config(self,pack):
         ### process config lines from FVWM database
+	### For syncronous processing
+	self.unlock()
 	
     def h_handler1(self,pack):
         ### respond to the pack
@@ -21,7 +23,7 @@ class mymodule(fvwmpy):
     
 m = mymodule()
 
-### Keep FVWM mute while we setting things up
+### Keep FVWM mute while we are setting things up
 m.mask       = 0
 m.syncmask   = 0
 m.nograbmask = 0
@@ -32,7 +34,7 @@ for arg in m.args:
 
 ### Read FVWM's database of module config lines and parse them
 ### using `m.h_config` handler
-m.getconfig(m.h_config, apply_other_handlers = False)
+m.getconfig(m.h_config)
 
 ### Register handlers
 m.register_handler(mask1,m.h_handler1)
@@ -55,7 +57,7 @@ m.mask |= fvwmpy.M_SENDCONFIG
 ###   `self.unlock()` at the end, to let FVWM know that it has finished.)
 m.syncmask |= fvwmpy.M_SENDCONFIG
 
-### Do some other stuff
+### Do some other module stuff
 
 ### If the module is persistent (listens to FVWM and executes handlers)
 m.run()
@@ -100,7 +102,9 @@ This module is released under GPLv3 license.
 - **`fvwmpy.packetnames`**
 
   Dictionary for converting packet types to their names.
-  E.g. fvwmpy.packetnames[MX_LEAVE_WINDOW] = "MX_LEAVE_WINDOW"
+  E.g.
+
+  `fvwmpy.packetnames[MX_LEAVE_WINDOW] == "MX_LEAVE_WINDOW"`
 
 - **`fvwmpy.packetcodes`**
 
@@ -113,6 +117,7 @@ This module is released under GPLv3 license.
   `bytearray` representation.
 
 - **`fvwmpy.NOT_FINISHED`** and **`fvwmpy.NOT_FINISHED`**
+
   `bytearray`s containing tags to be sent to FVWM at the end of every
   message to notify whether module intends to continue of finished
   working.
@@ -126,6 +131,7 @@ This module is released under GPLv3 license.
   String. Codex for en/de-coding strings during communication with FVWM.
 
 - **`fvwmpy.VERSION`**
+
   String.
   
 ### Helper functions
@@ -142,7 +148,7 @@ This module is released under GPLv3 license.
 
   `fcn(message_string, arguments)`
 
-  and use `str.format(arguments)` formatting paradigm. Instances of
+  and use `message_string.format(arguments)` formatting paradigm. Instances of
   `fvwmpy` class have their own similar logging functions.
   
   
@@ -173,11 +179,13 @@ This module is released under GPLv3 license.
   stream to the next pack.
 
 
-### Class fvwmpy
+### Class `fvwmpy.fvwmpy`
 
 `m=fvwmpy()`
 
 Instances of `fvwmpy` have the following attributes and methods
+
+#### Attributes
 
 - **`m.me`**
 
@@ -191,104 +199,544 @@ Instances of `fvwmpy` have the following attributes and methods
 
 - **`m.mask`**
 
-  Integer. Mask for communication from FVWM. The mask control what
+  Integer. Mask for communication from FVWM. The mask controls what
   kind of packets FVWM sends to the module. The normal and extended (bits
-  higher then 32) masks are treated the same. If you update the value
-  of the mask attribute it will be split into normal and extended
-  parts and sent to fvwm automatically, if the new value is different
-  from the old. See `fvwmpy.M[X]_*` constants. See also `m.push_masks(...)`
-  and `m.pull_masks()` methods for temporarily changing masks.
+  higher then 32) masks are treated the same.
+
+  Setting the mask to a new value will trigger communication with FVWM
+  to let FVWM know the new value, but only if the new value is
+  different from the old. Note, that if you previously changed the
+  mask by some other method (sending an appropriate message to FVWM)
+  the new value might not be communicated to the window manager when
+  executing `m.mask = <new_value>`. 
+  
+  See `fvwmpy.M[X]_*` .
+
+  See also `m.push_masks(...)` and `m.pull_masks()` methods for
+  temporarily changing masks.
+  
   See [FVWM module
   interface](https://www.fvwm.org/Archive/ModuleInterface/) for
-  explanation of the concepts.
+  the explanation of the concepts of masking.
   
 - **`m.syncmask`** and **`m.nograbmask`**
 
   are similar to `m.mask` but contain values of syncmask and nograb
   masks.
+
+- **`m.winlist`** and **`m.config`
+
+  `m.winlist` is the database of windows known to FVWM. It can be
+  built by calling `m.getwinlist()` method. It is also possible to
+  arrange to have `m.winlist` to be up to date at all times. See
+  information on `m.h_updatewl` handler. For more details see
+  **winlist database** below
+
+- **`m.config`**
+
+  `m.config` is the database containing information sent by FVWM
+  during execution of *Send_ConfigInfo* command and with M_SENDCONFIG
+  packets. See  `m.getconfig()` method and `m.h_saveconfig()` handler.
+
+- **`m.context_window`**
+
+  Integer. Contains id of the window in whose context the module was
+  started or 0 if the module was executed outside of any window context.
+
+- **`m.context_deco`**
+
+  Window decoration context in which module was started or 0 if  the
+  module was executed outside of any window context. See `fvwmpy.C_*`
+  and [FVWM module
+  interface](https://www.fvwm.org/Archive/ModuleInterface/) for
+  explanation of decoration contexts.
+
+- **`m.args`**
+
+  List of strings. Contains command line arguments of the module. 
+
+- **`m.handlers`**
+
+  A dictionary whose keys are packet types and values are lists of
+  handler functions, each of which takes one argument, which is a
+  packet.
+  Initially all lists are empty.
+
+  See also `m.register_handler()`,  `m.unregister_handler()`,
+  `m.clear_handlers()`, `m.registered_handler()` and
+  `m.call_handlers()` methods.
+
+- **`m.var`** and **`m.infostore`**
+
+  See **FVWM variables and infostore** below
+
+
+#### Methods
+
+- **`m.logger`**, **`m.dbg()`**, **`m.info()`**, **`m.warn()`**,
+  **`m.err()`** and **`m.crit()`**
+
+  Logger and logging functions. They should be called
+
+  `m.<log_fcn>(message_string, *arguments)`
   
+  and use `message_string.format(*arguments)` formatting paradigm.
+  Logging is directed to *stderr*. For the module *stderr* will be the
+  same as for FVWM. Logging functions print the severity level
+  followed by the alias of the module followed by the formatted
+  message.
+  
+- **`m.sendmessage(msg, context_window=None, finished=False)`**
 
-tofvwm,fromfvwm      -- pipes for communicating with fvwm
+  Send a (possibly multiline) message to FVWM for execution in the
+  context of `context_window`.
+  
+  If `context_window` is not given or `None`, then the window context
+  will be equal to the context at which module was called (that is
+  `m.context_window`). If `context_window==0`, then FVWM executes
+  commands without window context.  
 
-window               -- id of the context window at which the module
-                        was started
+  If `finished` then FVWM will be notified that the module is done
+  working and about to exit soon.
 
-decoration           -- window decoration in which the module was
-                        launched. See C_* constants.
+- **`m.packet(parse=True, raw=False)`**
 
-args                 -- the list of strings. Command line arguments of
-                        the module
+  Read and return a packet from 'FVWM to module'-pipe. See
+  **Packets** for the structure of the packet data type.
 
-handlers             -- The dictionary of handlers indexed my M[X]_*
-		        masks. In the standard run() routine
-			all handlers in inst.handlers[m] are executed
-			whenever a packet of type m ( in { M[X]_* } )
-			is received from fvwm. Packet is passed to the
-		        handler as an argument.
+  If `parse` then decode the packet and store the fields.
 
-winlist              -- The list of all windows. Initially it is
-                        empty. It is build by inst.getwinlist method.
-			To keep it up to date register inst.h_updatewl
-                        method for the appropriate masks
-	inst.register_handler(FvwmPy.M_FOR_WINLIST,inst.h_updatewl)
+  If `raw` then set p["raw"] to the raw byte array of the packet
+  (without the header)
 
-The following attributes are updated by getconfig method:
+- **`m.resync()`**
 
-colorset             -- list of colorsets. It is updated by getconfig
-                        method. 
-      
-config               -- list of config lines matching alias attribute.
-                        Updated by getconfig method.
+  Seek the 'FVWM to module'-pipe to the start of the next packet.
+  Usefull in case of pipe desyncronization.
 
-DesktopSize          -- tuple of two integers
+- **`m.finishedstartup()`**
 
-ImagePath            -- tuple of strings
+  Tell FVWM that the module has finished setting thing up and is ready to
+  start working.
 
-XineramaConfig       -- tuple of integers
+- **`m.exit(n=0)`**
 
-ClickTime 	     -- integer
+  Clean up and exit with exit status `n`.
+  See also `m.h_exit()` handler.
 
-IgnoreModifiers	     -- tuple of integers
+- **`m.unlock(finished=False)`**
 
-Methods:
+  During syncronous operations, tell FVWM that module is ready to
+  continue working and listening to FVWM.
 
-getwl()              -- update winlist
+  If `finished` then notify FVWM that the module is about to exit.
 
-msg(...)             -- write a message prepended with module name to
-		        stderr. Takes the same arguments as print(...)
+- **`m.push_masks(mask,syncmask,nograbmask)`**
 
-sendmessage(string,window=0,done=False)
-                     -- Send text message to fvwm at window context
-		        and indicate whether module has finished
-			working.
+  Set mask, syncmask and nograbmask to new values temporarily, if
+  don't want to receive packets of some type during some operation
+  (E.g. during *Send_WindowList* or *Send_ConfigInfo* commands).
+  If any of the values is `None` than the corresponding mask is left
+  unchanged.
+  
+  It is possible to have several embedded
+  `m.push_masks`--`m.restore_masks` constructs.
 
-finishedstartup()    -- tell fvwm that module is ready to process
-                        packets.   
+- **`m.restore_masks()`**
 
-exit(n=0)            -- cleanup notify fvwm and exit with status n.
+  Restore masks previously overriden by `m.push_masks`
+  If mask stack is empty (more `m.restore_masks()`'s then
+  `m.push_masks()`'s)
+  `fvwmpy.IllegalOperation` exception is raised.
 
-unlock(done=False)   -- In case of syncronous operation tell fvwm to
-                        go on and indicate whether finished.
+- **`m.getconfig(handler=None, match=None)`**
 
-getconfig(match=None, merge = False)
-                     -- ask fvwm and update config database. Also
-		        update values of some other attributes, see
-			above.
+  Ask FVWM for configuration info. Each received packet is passed to
+  the `handler`.
 
-getwinlist()         -- update winlist database.
-                        To keep it up to date at all times register
+  `handler` is a callable taking one argument, which is a packet of
+  type matching `fvwmpy.M_FOR_CONFIG`. If `handler` is not supplied
+  then default handler `m.h_saveconfig` is used. `m.h_saveconfig` just
+  fills `m.config` database with the information received from FVWM.
 
-	inst.register_handler(FvwmPy.M_FOR_WINLIST,inst.h_updatewl)
-			
-			and include appropriate masks
+  `match` is a string to match module configuration lines against.
+  If not supplied then `"*" + m.alias` is assumed.
+  If `match == ""` then all configuration lines are received and
+  processed.    	
+  
+  See **Config database** for more information.
 
-	inst.mask |= FvwmPy.M_FOR_WINLIST
+- **`m.getwinlist(self, handler = None)`**
 
-register_handler(mask,handler)
-		     -- register handler to be executed for packets
-		        matching mask. Handler should take one
-			argument which is the packet.
-		
+  Ask FVWM for the list of all windows it manages. Each packet
+  received in response is passed to the handler.
 
-unregister_handler(self,mask,handler)
-		     -- remove handler from the execution queue	
+  `handler` should be a callable taking one argument, which is a
+  packet of type matching `fvwmpy.M_FOR_WINLIST`. If `handler` is not
+  supplied then default handler `m.h_updatewl` is
+  used. `m.h_updatewl` updates `m.winlist` database with the
+  information received from FVWM.
+
+  If you want to keep `m.winlist` up to date all the time, then
+  include the following
+  ```
+  m.getwinlist()
+  m.register_handler(fvwmpy.M_FOR_WINLIST, m.h_updatewl)
+  m.mask |= fvwmpy.M_FOR_WINLIST
+  ```
+  somewhere in your code.
+  
+- **`m.register_handler(mask, handler)`**
+
+  Register `handler` for packets of type matching `mask`.
+  The default mainloop executes all the handlers for all matching
+  packets in the order they were registered.
+
+  `handler` should be a callable taking one argument, which is a
+  packet of type matching `mask`.
+
+  If `handler` is already registered previously for some packet types,
+  it will not be registered again, neither it will be moved to the end
+  of execution queue for that type. If you want to move some registered
+  handler to the end of the queue, you have to unregister it first.
+  
+- **`m.unregister_handler(mask, handler)`**
+
+  Remove handler from the execution queue for the packets matching
+  `mask`. It is **not** an error to try to unregister a handler, which
+  is not registered. So, for example,
+  ```
+  m.unregister_handler(fvwmpy.M_ALL, m.h_handler)
+  ```
+  removes `m.h_handler` from all queues where it is present.
+
+- **`m.call_handlers(pack)`**
+
+  Execute all handlers in the queue corresponding to the `pack`'s
+  packet type passing packet `pack` to them.
+
+- **`m.clear_handlers(mask)`**
+
+  Clear all execution queues for packets matching `mask`.
+
+- **`m.registered_handler(handler)`**
+
+  Return the mask for the queues where handler is registered,
+
+##### Supplied handlers
+
+- **`m.h_saveconfig(pack)`**
+
+  This handler is capable of processing packets matching
+  `fvwmpy.M_FOR_CONFIG`. It simply records the information in
+  `m.config` database. You can insert the following lines in your code
+  to keep the database up to date
+  ```
+  m.register_handler(fvwmpy.M_FOR_CONFIG, m.h_saveconfig)
+  m.mask |= M_SENDCONFIG
+  ### If you want to process config in a syncronous manner
+  #m.register_handler(fvwmpy.M_FOR_CONFIG, m.h_unlock)
+  #m.syncmask |= M_FOR_CONFIG
+  ```
+  `m.h_saveconfig(pack)` does not send *NOP Unlock* command to FVWM.
+  In case you want to process configuration information syncronously
+  register  `m.h_unlock` after `m.h_saveconfig`.
+
+- **`m.h_unlock(pack)`**
+
+  This handler completely ignores its argument and send the *NOP UnLock*
+  command to FVWM. FVWM waits for *NOP UnLock* after sending packets
+  matching `m.syncmask`, so it make sence to
+  ```
+  m.register_handler(m.syncmask,m.h_unlock)
+  ```
+  When syncmask changes one should
+  ```
+  m.unregister_handler(fvwmpy.M_ALL, m.h_unlock)
+  m.register_handler(m.syncmask, m.h_unlock)
+  ```
+  to make sure that  `m.h_unlock(pack)` is the last one in the queues
+  
+- **`m.h_exit(pack)`**
+
+  This handler ignores its argument, cleans things up and terminate the
+  module.
+
+- **`m.h_updatewl(pack)`**
+
+  This handler is capable to process packets matching
+  `fvwmpy.M_FOR_WINLIST`. It uses the packet to update `m.winlist`
+  database. 
+  
+  
+#### Winlist database **`m.winlist`**
+
+`m.winlist` is a dictionary of windows indexed by window id's.
+Each window is an instance of `fvwmpy._window` class and has the
+attributes and methods listed below. Attributes can also be accessed
+via `w["attribute"]` which is completely equivalent to `w.attribute`
+in that both raise `KeyError()` exception, if the attribute is missing.
+
+##### Attributes and methods of instances of `fvwmpy._window` class.
+
+For more comprehensive information refer to [FVWM module
+  interface](https://www.fvwm.org/Archive/ModuleInterface/) and
+  consult **fvwm.h, window_flags.h, Module.h vpacket.h** files in FVWM
+  source tree.
+
+- **`w.window`** window id
+- **`w.frame`** id of the frame window
+- **`w.wx`**, **`w.wy`** x,y location of the window’s frame
+- **`w.wdx`**, **`w.wdy`** width and height of the window’s frame
+- **`w.desk`** desktop number
+- **`w.layer`** layer
+- **`w.hints_base_width`**, **`w.hints_base_width`** window base width
+  and height
+- **`w.hints_width_inc`**, **`w.hints_height_inc`** window resize
+  width/height increment 
+- **`w.orig_hints_width_inc`**, **`w.orig_hints_height_inc`**
+  original window resize width/height increment 
+- **`w.hints_min_width`**, **`w.hints_min_height`**,
+  **`w.hints_max_width`**, **`w.hints_max_height`** 
+  window minimum/maximum width/height
+- **`w.icon_w`** icon label window id, or 0
+- **`w.icon_pixmap_w`** icon pixmap window id, or 0
+- **`w.hints_win_gravity`** window gravity
+- **`w.text_pixel`** pixel value of the text color
+- **`w.back_pixel`** pixel value of the window border color
+- **`w.ewmh_hint_layer`** ewmh layer
+- **`w.ewmh_hint_desktop`** ewmh desktop
+- **`w.ewmh_window_type`** ewmh window type
+- **`w.title_height`** window title height
+- **`w.border_width`** border width
+- **`w.win_name`** window name
+- **`w.ico_name`** icon name
+- **`w.win_vis_name`** window visible name
+- **`w.ico_vis_name`** icon visible name
+- **`w.res_class`** resolution class
+- **`w.res_name`** resolution name
+- **`w.mini_ico_dx`**, **`w.mini_ico_dy`** **ToDo these**
+- **`w.mini_ico_depth`**
+- **`w.winid_pix`**
+- **`w.winid_mask`**
+- **`w.mini_ico_filename`**
+- **`w.ico_filename`**
+- **`w.flags`** is a `bytearray` containing style flags and action flags
+- **`w.flag(i)`** returns the value of the i^th flag as 0/1 integer.
+
+  **ToDo:** access flags by meaningful names.
+
+  **ToDo:** It seems that FVWM sends window position relative to the
+  current viewport. Shall we recalculate it to be absolute within the
+  desk?
+  
+The winlist database is filled by `m.getwinlist()` method.
+You can keep it up to date by inserting the folowing lines in your code
+```
+m.getwinlist()
+m.register_handler(fvwmpy.M_FOR_WINLIST, m.h_updatewl)
+m.mask |= fvwmpy.M_FOR_WINLIST
+```
+
+
+#### Config database
+`m.config` is a database of configuration information sent in response
+to *Send_ConfigInfo* command. It is a list of strings, each is a
+module configuration lines. In addition it has the following attributes
+
+- **`c.DesktopSize`** the size of the desktop (in pages)
+- **`c.ImagePath`** a tuple of strings, each is the path where FVWM
+  searches for images
+- **`c.XineramaConfig`** a tuple of integers. See FVWM manual pages
+  for the meaning.
+- **`c.ClickTime`** integer. Click time in miliseconds
+- **`c.IgnoreModifiers`** tuple of integers. Modifiers that are ignored.
+- **`c.colorsets`** list of colorsets, each represented as a list of
+  strings.
+
+  **ToDo:** We really need to parse colorsets and create meaningfull
+    access to it's fields.
+
+#### FVWM Packets
+
+`m.packet()` returns an instance of `fvwmpy._packet` class, which
+inherits from `dict`. Attributes can also be accessed
+via `p["attribute"]` which is completely equivalent to `p.attribute`
+in that both raise `KeyError()` exception, if the attribute is missing.
+
+It has always the following attributes
+- **`p.ptype`** integer type of the packet. See `fvwmpy.M[X]_*` constants.
+- **`p.name`** type of the packet as a character string matching "M[X]_*".
+- **`p.time`** time stamp
+
+If the packet was read using `p=m.packet(raw=True)` it will also have
+- **`p.time`** the bytearray representation of the packet as sent by
+  FVWM, but without the header.
+
+Other attributes/keys depend on the packet. They will only be set if
+`pasre=True` passed to the `m.packet()` method.
+
+Depending on the packet type the attributes are as follows.
+
+- **`fvwmpy.M_NEW_PAGE`**
+  - **`p.px`**, **`p.py`** coordinates of the nw corner of the current
+    viewport
+  - **`p.desk`** current desk
+  - **`p.max_x`**, **`p.max_y` sizes of the current viewport
+  - **`p.nx`**, **`p.ny`** number of pages in the desktop
+    in x and y directions.
+
+- **`fvwmpy.M_NEW_DESK`**
+  - **`p.desk`** current desk number
+
+- **`fvwmpy.M_OLD_ADD_WINDOW`**, **`fvwmpy.M_EXTENDED_MSG`**,
+  **`fvwmpy.M_UNKNOWN1`**
+  - **`p.body`** body of the package as a bytearray 
+
+
+- **`fvwmpy.M_RAISE_WINDOW`**, **`fvwmpy.M_LOWER_WINDOW`**,
+  **`fvwmpy.M_DESTROY_WINDOW`**, **`fvwmpy.M_MAP`**, **`fvwmpy.M_WINDOWSHADE`**,
+  **`fvwmpy.M_DEWINDOWSHADE`**, **`fvwmpy.MX_ENTER_WINDOW`**,
+  **`fvwmpy.MX_LEAVE_WINDOW`**
+  - **`p.window`** window id
+  - **`p.frame`** frame window id
+
+- **`fvwmpy.M_FOCUS_CHANGE`**
+  - **`p.window`**
+  - **`p.frame`**
+  - **`p.focus_change_type`**
+  - **`p.text_pix`**
+  - **`p.border_pix`**
+
+- **`fvwmpy.M_ICONIFY`**, **`fvwmpy.M_DEICONIFY`**
+  - **`p.window`**
+  - **`p.frame`**
+  - **`p.ix`**,  **`p.iy`**
+  - **`p.idx`**,  **`p.idy`**
+  - **`p.fx`**,  **`p.fy`**
+  - **`p.fdx`**,  **`p.fdy`**
+
+- **`fvwmpy.M_WINDOW_NAME`**
+  - **`p.window`**
+  - **`p.frame`**
+  - **`p.win_name`**
+
+- **`fvwmpy.M_ICON_NAME`**
+  - **`p.window`**
+  - **`p.frame`**
+  - **`p.ico_name`**
+
+- **`fvwmpy.M_RES_CLASS`**
+  - **`p.window`**
+  - **`p.frame`**
+  - **`p.res_class`**
+
+- **`fvwmpy.M_RES_NAME`**
+  - **`p.window`**
+  - **`p.frame`**
+  - **`p.res_name`**
+
+- **`fvwmpy.END_WINDOWLIST`**, **`M_END_CONFIG_INFO`**
+  None
+
+- **`fvwmpy.M_ICON_LOCATION`**
+  - **`p.window`**
+  - **`p.frame`**
+  - **`p.ix`**, **`p.iy`**
+  - **`p.idx`**, **`p.dy`**
+
+- **`fvwmpy.M_ERROR`**, **`fvwmpy.M_CONFIG_INFO`**, **`M_SENDCONFIG`**
+  - **`p.string`**
+
+- **`fvwmpy.M_ICON_FILE`**
+  - **`p.window`**
+  - **`p.frame`**
+  - **`p.ico_filename`**
+
+- **`fvwmpy.M_DEFAULTICON`**
+  - **`p.ico_defaultfilename`**
+
+- **`fvwmpy.M_STRING`**, **`fvwmpy.MX_REPLY`**
+  - **`p.window`**
+  - **`p.frame`**
+  - **`p.string`**
+
+- **`fvwmpy.M_MINI_ICON`**
+  - **`p.window`**
+  - **`p.frame`**
+  - **`p.mini_ico_dx`**, **`p.mini_ico_dy`**, 
+  - **`p.mini_ico_depth`**
+  - **`p.winid_pix`**
+  - **`p.winid_mask`**
+  - **`p.mini_ico_filename`**
+
+- **`fvwmpy.M_VISIBLE_NAME`**
+  - **`p.window`**
+  - **`p.frame`**
+  - **`p.win_vis_name`**
+
+- **`fvwmpy.M_RESTACK`**
+  - **`p.win_stack`** list of triples of integers
+
+- **`fvwmpy.MX_VISIBLE_ICON_NAME`**
+  - **`p.window`**
+  - **`p.frame`**
+  - **`p.ico_vis_name`**
+
+- **`fvwmpy.MX_PROPERTY_CHANGE`**
+  - **`p.prop_type`**
+  - **`p.val_1`**
+  - **`p.val_2`**
+  - **`p.prop_str`**
+
+
+
+#### FVWM variables and InfoStore
+One can access FVWM variables in two ways
+
+1. `m.var.<var_name_with_underscores>` will be equal to the value of
+   FVWM variable as a string. FVWM variables often have a dot in their
+   names. To use this method you have to replace dots with
+   underscores. That is `m.var.w_id` will return the value `$[w.id]`.
+   You can not assign to or delete FVWM variables, so
+   `m.var.w_id = <value>` or `del m.var.w_id` will raise
+   `fvwmpy.IllegalOperation()` exception.
+
+2. `m.var("var_name1",...,context_window=None)` will return a tuple
+   with string-values of variables, whose names are given as string
+   arguments. It is not necessary (but allowed) to replace dots with
+   inderscore in variable names. If `context_window == None` then
+   module's context_window is assumed. If `context_window == 0` then
+   variable values are obtained outside of any context.
+
+The second method obtains all variable values in one communication cycle
+with FVWM, so it is preferable, when values of several variables are needed.
+
+If no variable with such name exist the return value will be literally
+`"$[{}]".format(varname)`.
+
+It is not possible to get value of a variable, whose name contains
+underscore. To the best of my knowledge there are no such varaibles,
+at least none are mentioned in the FVWM man pages.
+
+Similarly, one can access FVWM infostore database in two ways
+
+1. `m.infostore.<var_name_with_underscores>` will be equal to the
+   value of FVWM infostore variable as a string. You have to replace
+   dots with underscores in variable names. For example
+   `m.infostore.my_variable` will return the FVWM's value
+   `$[infostore.my.variable]`.  You can also assign to or delete
+   FVWM infostore variables, so
+   `m.infostore.my_variable = <value>` or
+   `del m.infostore.my_variable` are legal.
+
+2. Similarly `m.infostore("var_name1",...)` will return a tuple
+   with string-values of variables, whose names are given as string
+   arguments. It is not necessary (but allowed) to replace dots with
+   inderscore in variable names. 
+
+The second method obtains all variable values in one communication cycle
+with FVWM, so it is preferable, when values of several variables are needed.
+   
+Beware that it is not possible to get value of an infostore variable,
+whose name contains underscore. 

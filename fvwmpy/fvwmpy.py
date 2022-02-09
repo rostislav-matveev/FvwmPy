@@ -162,7 +162,13 @@ class _window(dict):
     file vpacket.h in fvwm source tree for the meaning of the flags.
     ToDo: Access flags by meaningfull names.
     """
-    
+
+    def __getattr__(self,attr):
+        return self[attr]
+
+    def __setattr__(self,attr,val):
+        self[attr] = val
+
     def flag(self,i):
         """
         Get i^th flag
@@ -175,6 +181,7 @@ class _window(dict):
         for k,v in self.items():
             string += "\t| {} = {}\n".format(k,v)
         return string
+
     
 class _winlist(dict):
     """List of all windows.  
@@ -229,12 +236,14 @@ class fvwmpy:
         self.context_deco   = int(_sys.argv[5],0);
         self.args           = _sys.argv[6:]
         self.handlers     = { pack : [] for pack in packetnames }
+        ### 
         self._mask        = -1
         self._syncmask    = -1
         self._nograbmask  = -1
         self.mask        = 0
         self.syncmask    = 0
         self.nograbmask  = 0
+        self.mask_stack  = list()
         self.winlist     = _winlist()
         self.var         = _fvwmvar(self)
         self.infostore   = _infostore(self)
@@ -280,9 +289,9 @@ class fvwmpy:
                                           FINISHED) ) )
         self._tofvwm.flush()
         
-    def packet(self, parse=True, raw=False, apply_handlers = True):
+    def packet(self, parse=True, raw=False):
         """
-        M.packet(parse=True, raw=False, no_handlers = False)
+        M.packet(parse=True, raw=False)
 
         Return a dictionary with two additional attributes:
            p.ptype  -- the type of the packet
@@ -291,11 +300,7 @@ class fvwmpy:
         parse(?)ing it and writing the content into appropriate fields. 
         And adding raw(?) content to the "raw" field.
         """
-        p = _packet(self._fromfvwm, parse=parse, raw=raw)
-        if apply_handlers:
-            for h in self.handlers[p.ptype]:
-                h(p)
-        return p
+        return _packet(self._fromfvwm, parse=parse, raw=raw)
 
     def resync(self):
         self.warn(" Resync the from-fvwm pipe. Package(s) may be lost.")
@@ -326,6 +331,7 @@ class fvwmpy:
     def _mask_set(self,m):
         ### To save on communication with Fvwm
         if self._mask == m: return
+        self.dbg(" mask.setter {}->{}",self._mask,m)
         self._mask = m
         ###split the mask and send separately
         ml = self._mask & ( M_EXTENDED_MSG - 1 )
@@ -377,61 +383,59 @@ class fvwmpy:
         self._nograbmask_set(m)
 
     def push_masks(self,mask,syncmask,nograbmask):
+        if mask       is None: mask       = self.mask
+        if syncmask   is None: syncmask   = self.syncmask
+        if nograbmask is None: nograbmask = self.nograbmask
         self.mask_stack.append( (self.mask,self.syncmask,self.nograbmask) )
-        self.mask, self.syncmask, self.nograbmask = (mask,syncmask,nograbmask)
-
+        self.dbg(" push_mask {}->{}", self.mask, mask) 
+        self.mask       = mask
+        self.syncmask   = syncmask
+        self.nograbmask = nograbmask
+        
     def restore_masks(self):
         try:
            self.mask, self.syncmask, self.nograbmask = self.mask_stack.pop() 
         except IndexError:
-            raise IllegalOperation("Can not restore masks. Mask stack is empty")
+            raise IllegalOperation(
+                "Can not restore masks. Mask stack is empty" )
         
-    def getconfig(self,
-                  handler=self.h_saveconfig,
-                  apply_other_handlers = True,
-                  match=None):
+    def getconfig(self, handler=None, match=None):
         self.push_masks( M_FOR_CONFIG | M_ERROR, 0, 0)
+        if handler is None:
+            handler = self.h_saveconfig
         if match is None:
             match = "*" + self.alias
         if handler == self.h_saveconfig:
+            ### reset the config database
             self.config = _config()
         try:
             self.sendmessage("Send_ConfigInfo {}".format(match))            
             while True:
-                p = self.packet(apply_handlers = apply_other_handlers)
+                p = self.packet()
                 handler(p)
                 if p.ptype == M_END_CONFIG_INFO: break
         except Exception as e:
             raise e
         finally:
             ### restore masks
-            self.pull_masks()
+            self.restore_masks()
             
-    def getwinlist(self):
-        savemask       = self.mask
-        savesyncmask   = self.syncmask
-        savenograbmask = self.nograbmask
-        self.mask       =  M_FOR_WINLIST | M_ERROR
-        self.syncmask   = 0
-        self.nograbmask = 0
+    def getwinlist(self, handler = None):
+        self.dbg(" m.getwinlist")
+        self.push_masks( M_FOR_WINLIST | M_ERROR, 0, 0 )
+        if handler is None:
+            handler = self.h_updatewl
         self.winlist = _winlist()
-        hmask = self.registered_handler(self.h_updatewl)
-        self.register_handler(M_FOR_WINLIST, self.h_updatewl)
         try:
             self.sendmessage("Send_WindowList")
             while True:
                 p = self.packet()
+                handler(p)
                 if p.ptype == M_END_WINDOWLIST : break
         except Exception as e:
             raise e
         finally:
-            ### restore state
-            for m in split_mask(M_FOR_WINLIST):
-                if not m & hmask:
-                    self.unregister_handler(m, self.h_updatewl)
-            self.mask       = savemask
-            self.syncmask   = savesyncmask
-            self.nograbmask = savenograbmask
+            self.restore_masks()
 
     def register_handler(self,mask,handler):
         for m in self.handlers:
@@ -446,6 +450,16 @@ class fvwmpy:
                 except ValueError:
                     continue
 
+    def call_handlers(self,p):
+        for h in self.handlers[p.ptype]:
+            h(p)
+        return p
+        
+    def clear_handlers(self,mask):
+        for h in self.handlers[p.ptype]:
+            if h & mask:
+                self.handlers[p.ptype] = list()
+         
     def registered_handler(self,handler):
         mask = 0
         for m in self.handlers:
@@ -457,27 +471,32 @@ class fvwmpy:
     ### HANDLERS
     def h_saveconfig(self,p):
         if p.ptype == M_END_CONFIG_INFO: return
-        cl = p["string"]
-        if cl.lower().startswith("colorset"):
+        cl = p["string"].lower()
+        if cl.startswith("*"):
+            self.config.append(p["string"])
+        elif cl.startswith("colorset"):
             ### ToDo: parse
             cll = cl.split()
             self.config.colorsets[int(cll[1],16)]=cll[2:]
-        elif cl.lower().startswith("*"):
-            self.config.append(cl)
-        elif cl.lower().startswith("desktopsize"):
+        elif cl.startswith("desktopsize"):
             cll = cl.split()
             self.config.DesktopSize = ( int(cll[1]), int(cll[2]) )
-        elif cl.lower().startswith("imagepath"):
+        elif cl.startswith("imagepath"):
             cll = cl.split(" ")[1].split(":")
             self.config.ImagePath   = tuple(cll)
-        elif cl.lower().startswith("xineramaconfig"):
+        elif cl.startswith("xineramaconfig"):
             cll = cl.split()[1:]
             self.config.XineramaConfig = tuple([int(x) for x in cll])
-        elif cl.lower().startswith("clicktime"):
+        elif cl.startswith("clicktime"):
             self.config.ClickTime = int(cl.split()[1])
-        elif cl.lower().startswith("ignoremodifiers"):
+        elif cl.startswith("ignoremodifiers"):
             cll = cl.split()[1:]
             self.config.IgnoreModifiers = tuple([int(x) for x in cll])
+        else:
+            IllegalOperation("Can not parse the packet")
+            
+    def h_unlock(self, p):
+        self.unlock()
         
     ### Update winlist
     def h_updatewl(self,p):
@@ -500,7 +519,7 @@ class fvwmpy:
         self.dbg(" Start main loop")
         while True:
             p = self.packet()
-            # self.dbg("Mainloop: Packet {}".format(packetnames[p.ptype]))
+            self.call_handlers(p)
             
     def run(self):
         self.mainloop()
