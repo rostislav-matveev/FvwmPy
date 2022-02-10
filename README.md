@@ -10,11 +10,11 @@ This module is released under GPLv3 license.
 I love FVWM
 
 ## Features
-- Simple interface for communicating with the window manager.
+- Simple interface for communication with the window manager.
 - Possibility of maintaining dynamically updated list of windows and
   their properties.
 - Possibility to iterate over windows satisfying given conditions.  
-- Possibility of dynamically change configuration
+- Possibility of dynamically changing configuration
 - Simple interface for accessing FVWM's variables and infostore
   database.
 - Compatible with tkinter
@@ -23,7 +23,8 @@ I love FVWM
   later.
 - Support for the concept of module aliases
 
-A typical example of a module using fvwmpy may look along the following lines
+A typical example of a module using fvwmpy may be written along the
+following lines 
 ```
 #!/usr/bin/python3
 import fvwmpy

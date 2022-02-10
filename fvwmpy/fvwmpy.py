@@ -36,6 +36,7 @@ class _StyleAdapter(_logging.LoggerAdapter):
 _logging.basicConfig(stream=_sys.stderr)
 
 DEBUGLEVEL = _logging.DEBUG
+
 _l   = _StyleAdapter(_logging.getLogger("fvwmpy"))
 _l.setLevel(LOGGINGLEVEL)
 dbg  = _l.debug

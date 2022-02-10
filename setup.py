@@ -5,7 +5,7 @@ from distutils.core import setup
 setup(
     name = 'fvwmpy',
     packages = ['fvwmpy'],
-    version = '1.0.0',
+    version = '1.0.1',
     description = 'Framework for developing FVWM modules in python',
     author = 'Rostislav Matveev',
     author_email = 'rostislav.matveev',

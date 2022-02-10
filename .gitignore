@@ -3,6 +3,6 @@
 **/*tmp*
 **/*~
 **/#*#
-examples/
+examples/*
 FvwmTest.py
 .pypirc
