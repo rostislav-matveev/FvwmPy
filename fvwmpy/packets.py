@@ -263,10 +263,6 @@ class _packet(dict):
                     format(self.name,t.tm_hour,t.tm_min,t.tm_sec,ms))
         for k,v in self.items():
             res.append("\t| {} = {}".format(k,v))
-        try:
-            res.append("\t|" + "-"*40 + "\n" + "\t|" + str(self.raw))
-        except AttributeError:
-            pass
         return "\n".join(res)
 
 

@@ -19,7 +19,7 @@ class PipeDesync(FvwmPyException):
     """
     pass
 
-class IllegalOp(FvwmPyException):
+class IllegalOperation(FvwmPyException):
     """ 
     Indicates that some illegal action was attempted
     like assigning to Fvwm variable.

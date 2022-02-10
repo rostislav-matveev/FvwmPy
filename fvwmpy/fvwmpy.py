@@ -235,6 +235,12 @@ class fvwmpy:
         self.context_window = int(_sys.argv[4],0)
         self.context_deco   = int(_sys.argv[5],0);
         self.args           = _sys.argv[6:]
+        if self.args:
+            if not self.args[0].startswith('-'):
+                self.alias = args[0]
+                del self.args[0]
+            elif self.args[0] == '-':
+                del self.args[0]
         self.handlers     = { pack : [] for pack in packetnames }
         ### 
         self._mask        = -1
@@ -331,7 +337,6 @@ class fvwmpy:
     def _mask_set(self,m):
         ### To save on communication with Fvwm
         if self._mask == m: return
-        self.dbg(" mask.setter {}->{}",self._mask,m)
         self._mask = m
         ###split the mask and send separately
         ml = self._mask & ( M_EXTENDED_MSG - 1 )
@@ -387,7 +392,6 @@ class fvwmpy:
         if syncmask   is None: syncmask   = self.syncmask
         if nograbmask is None: nograbmask = self.nograbmask
         self.mask_stack.append( (self.mask,self.syncmask,self.nograbmask) )
-        self.dbg(" push_mask {}->{}", self.mask, mask) 
         self.mask       = mask
         self.syncmask   = syncmask
         self.nograbmask = nograbmask
@@ -421,7 +425,6 @@ class fvwmpy:
             self.restore_masks()
             
     def getwinlist(self, handler = None):
-        self.dbg(" m.getwinlist")
         self.push_masks( M_FOR_WINLIST | M_ERROR, 0, 0 )
         if handler is None:
             handler = self.h_updatewl
@@ -514,13 +517,14 @@ class fvwmpy:
     def h_exit(self,p):
         self.exit()
 
-    
-    def mainloop(self):
+    def run(self):
         self.dbg(" Start main loop")
         while True:
-            p = self.packet()
-            self.call_handlers(p)
-            
-    def run(self):
-        self.mainloop()
+            try:
+                p = self.packet()
+                self.call_handlers(p)
+            except PipeDesync as e:
+                self.warn(" Pipe desyncronised: {}".e.args)
+                self.warn(" Trying to resync the pipe. Some packets may be lost")
+                self.resync()
             
