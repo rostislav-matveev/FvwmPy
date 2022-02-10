@@ -33,10 +33,11 @@ class _StyleAdapter(_logging.LoggerAdapter):
         msg = _BraceString(msg)
         return msg, kwargs
     
-_logging.basicConfig(stream=_sys.stderr,
-                     level=_logging.DEBUG)
+_logging.basicConfig(stream=_sys.stderr)
 
+DEBUGLEVEL = _logging.DEBUG
 _l   = _StyleAdapter(_logging.getLogger("fvwmpy"))
+_l.setLevel(LOGGINGLEVEL)
 dbg  = _l.debug
 info = _l.info
 warn = _l.warning
@@ -44,6 +45,7 @@ err  = _l.error
 crit = _l.critical
 
 VERSION = "0.0.1"
+
 ################################################################################
 
 class _fvwmvar:
@@ -195,8 +197,33 @@ class _winlist(dict):
     Currently implemented conditions are 
     None
     """
-    def filter(self):
-        return self.__iter__()
+    def __init__(self,module):
+        super().__init__()
+        super().__setattr__("_module",module)
+        
+    def filter(self,conditions):
+        self._module.push_masks(M_STRING,0,0)
+        cl = conditions.splitlines()
+        cl = map(lambda x: x.strip(" \t,"),cl)
+        cl = filter(None, cl)
+        cond = ",".join(cl)
+        self._module.dbg( " Use condition {}",cond)
+        self._module.sendmessage(
+            "All ({}) SendToModule {} $[w.id]".format(cond,
+                                                      self._module.alias) )
+        self._module.sendmessage(
+            "SendToModule {} finishedfilterwindows".
+            format(self._module.alias) )
+        filteredlist = list()
+        p = self._module.packet()
+        self._module.dbg( "Got {}",p.string )
+        while p.string.startswith("0x"):
+            filteredlist.append( int(p.string,0) )
+            p = self._module.packet()
+            self._module.dbg( "Got {}",p.string )
+        for wid in filteredlist:
+            yield self[wid]
+        self._module.restore_masks()
 
 class _config(list):
     _max_colorsets = int("0x40",16)
@@ -215,16 +242,17 @@ class fvwmpy:
         self.config       = _config()
         self.me     = _os.path.split(_sys.argv[0])[1]
         self.logger = _StyleAdapter(_logging.getLogger(self.alias))
+        self.logger.setLevel(LOGGINGLEVEL)
         self.dbg    = self.logger.debug
         self.info   = self.logger.info
         self.warn   = self.logger.warning
         self.err    = self.logger.error
         self.crit   = self.logger.critical
-        self.dbg(" Starting...")
+        # self.dbg(" Starting...")
         if len(_sys.argv) < 6:
             raise FvwmLaunch("{}: Should only be executed by fvwm!".
                              format(self.me))
-        self.dbg(" Arguments: {}",_sys.argv)
+        # self.dbg(" Arguments: {}",_sys.argv)
         try:
             self._tofvwm     = _os.fdopen(int(_sys.argv[1]), "wb")
             self._fromfvwm   = _os.fdopen(int(_sys.argv[2]), "rb")
@@ -234,13 +262,16 @@ class fvwmpy:
         self.dbg(" Opened pipes")
         self.context_window = int(_sys.argv[4],0)
         self.context_deco   = int(_sys.argv[5],0);
-        self.args           = _sys.argv[6:]
-        if self.args:
-            if not self.args[0].startswith('-'):
-                self.alias = args[0]
-                del self.args[0]
-            elif self.args[0] == '-':
-                del self.args[0]
+        if _sys.argv[6:]:
+            if not _sys.argv[6].startswith('-'):
+                self.alias = _sys.argv[6]
+                self.args =  _sys.argv[7:]
+            elif _sys.argv[6] == '-':
+                self.args =  _sys.argv[7:]
+            else:
+                self.args =  _sys.argv[6:]
+        else:
+            self.args = list()
         self.handlers     = { pack : [] for pack in packetnames }
         ### 
         self._mask        = -1
@@ -250,7 +281,7 @@ class fvwmpy:
         self.syncmask    = 0
         self.nograbmask  = 0
         self.mask_stack  = list()
-        self.winlist     = _winlist()
+        self.winlist     = _winlist(self)
         self.var         = _fvwmvar(self)
         self.infostore   = _infostore(self)
         
@@ -428,7 +459,7 @@ class fvwmpy:
         self.push_masks( M_FOR_WINLIST | M_ERROR, 0, 0 )
         if handler is None:
             handler = self.h_updatewl
-        self.winlist = _winlist()
+        self.winlist.clear()
         try:
             self.sendmessage("Send_WindowList")
             while True:
