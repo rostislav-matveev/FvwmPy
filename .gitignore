@@ -3,7 +3,6 @@
 **/*tmp*
 **/*~
 **/#*#
-install
-examples/*
 examples/
 FvwmTest.py
+.pypirc

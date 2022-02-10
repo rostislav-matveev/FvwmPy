@@ -13,6 +13,7 @@ I love FVWM
 - Simple interface for communicating with the window manager.
 - Possibility of maintaining dynamically updated list of windows and
   their properties.
+- Possibility to iterate over windows satisfying given conditions.  
 - Possibility of dynamically change configuration
 - Simple interface for accessing FVWM's variables and infostore
   database.
@@ -37,7 +38,10 @@ class mymodule(fvwmpy):
     def h_handler2(self,pack):
         ### respond to the pack
     ...
-    
+
+### Let's have lot's of debugging output
+LOGGINGLEVEL = fvwmpy._logging.DEBUG
+
 m = mymodule()
 
 ### Keep FVWM mute while we are setting things up
@@ -74,7 +78,13 @@ m.mask |= fvwmpy.M_SENDCONFIG | fvwmpy.M_CONFIGINFO
 m.syncmask |= fvwmpy.M_SENDCONFIG
 m.register_handler(fvwmpy.M_SENDCONFIG, m.h_unlock)
 
+### If we want to have up to date list of windows
+m.getwinlist()
+m.register_handler(fvwmpy.M_FOR_WINLIST, m.h_updatewl)
+m.mask |= fvwmpy.M_FOR_WINLIST
+
 ### Do some other module stuff
+m.info(" Looks like FVWM manages now {} windows",len(m.winlist))
 
 ### If the module is persistent (listens to FVWM and executes handlers)
 m.run()
@@ -218,17 +228,16 @@ Instances of `fvwmpy` have the following attributes and methods
 
 - **`m.alias`**
 
-  String. Alias of the module. Initially it is equal to `m.me`.  Alias
-  is then guessed from command line arguments of the module during
-  initialization.  If the first acommandline rgument does not start
-  with '-', then it is assumed to be the alias of the module. Then
-  `m.alias` is set (which affects logging functions and pruning of
-  configuration lines) and this argument is not included in
-  `m.args`. If the first argument is a single '-', then it is also
-  removed from `m.args` and `m.alias` is set to be the same as
-  `m.me`.
-  `m.alias` can be changed afterwards. Such action will affect logging
-  functions and prunning of configuration lines.
+  String. Alias of the module. Alias is guessed from the command line
+  arguments of the module during initialization.  If the first
+  commandline argument does not start with '-', then it is assumed to
+  be the alias of the module. Then `m.alias` is set (which affects
+  logging functions and pruning of configuration lines) and this
+  argument is not included in `m.args`. If the first argument is a
+  single '-', then it is also removed from `m.args` and `m.alias` will
+  be the same as `m.me`.  `m.alias` can be changed afterwards. Such
+  action will affect logging functions and prunning of configuration
+  lines.
 
 - **`m.mask`**
 
@@ -258,8 +267,8 @@ Instances of `fvwmpy` have the following attributes and methods
   
 - **`m.syncmask`** and **`m.nograbmask`**
 
-  are similar to `m.mask` but contain values of syncmask and nograb
-  masks.
+  are similar to `m.mask` but contain values of syncmask and
+  nograbmask.
 
 - **`m.winlist`** 
 
@@ -306,22 +315,30 @@ Instances of `fvwmpy` have the following attributes and methods
   argument is not included in `m.args`. If the first argument is a
   single '-', then it is also removed from `m.args`.
   -  If the module is invoked by
-     ```Module FvwmMyModule FvwmAkaModule arg1 arg2 ...```
-     then `m.alias == 'FvwmAkaModule' and `m.args == ['arg1', 'arg2', ...]`
+     ```
+     Module FvwmMyModule FvwmAkaModule arg1 arg2 ...
+     ```
+     then `m.alias == 'FvwmAkaModule'` and `m.args == ['arg1', 'arg2', ...]`
   
   -  If the module is invoked by
-     ```Module FvwmMyModule - FvwmAkaModule arg1 arg2 ...```
+     ```
+     Module FvwmMyModule - FvwmAkaModule arg1 arg2 ...
+     ```
+     then `m.alias == 'FvwmMyModule'` and
+     `m.args == ['FvwmAkaModule', 'arg1', 'arg2', ...]`
+  
+  -  If the module is invoked by
+     ```
+     Module FvwmMyModule - FvwmAkaModule arg1 arg2 ...
+     ```
      then `m.alias == 'FvwmMyModule' and
      `m.args == ['FvwmAkaModule', 'arg1', 'arg2', ...]`
   
   -  If the module is invoked by
-     ```Module FvwmMyModule - FvwmAkaModule arg1 arg2 ...```
-     then `m.alias == 'FvwmMyModule' and
-     `m.args == ['FvwmAkaModule', 'arg1', 'arg2', ...]`
-  
-  -  If the module is invoked by
-     ```Module FvwmMyModule -geometry 200x200+24+0 ...```
-     then `m.alias == 'FvwmMyModule' and
+     ```
+     Module FvwmMyModule -geometry 200x200+24+0 ...
+     ```
+     then `m.alias == 'FvwmMyModule'` and
      `m.args == ['-geometry', '200x200+24+0', ...]`
   
 - **`m.handlers`**
@@ -594,10 +611,6 @@ and another one descrimed below.
   Note that `winlist.filter` may have troubles performing if the
   winlist database is not up to date, since it delegates tha actual
   filtering to the window manager.
-  
-**ToDo** implement winlist.filter(conditions) method to return
-iterator going through windows matching conditions (like '*All
-(conditions)*' command in FVWM's scripting language).
   
 ##### Attributes and methods of instances of `fvwmpy._window` class.
 
