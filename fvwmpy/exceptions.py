@@ -19,6 +19,13 @@ class PipeDesync(FvwmPyException):
     """
     pass
 
+class FvwmError(FvwmPyException):
+    """ 
+    This exception is raised, when we were trying to get some information from
+    FVWM, but got M_ERROR packet in return.
+    """
+    pass
+
 class IllegalOperation(FvwmPyException):
     """ 
     Indicates that some illegal action was attempted

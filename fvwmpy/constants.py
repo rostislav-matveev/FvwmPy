@@ -1,4 +1,12 @@
 import struct as _struct
+################################################################################
+### logging levels
+from logging import CRITICAL as L_CRITICAL
+from logging import DEBUG    as L_DEBUG
+from logging import ERROR    as L_ERROR
+from logging import INFO     as L_INFO
+from logging import NOTSET   as L_NOTSET
+from logging import WARNING  as L_WARNING
 
 ################################################################################
 ### FVWM contexts

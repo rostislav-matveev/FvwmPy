@@ -44,6 +44,7 @@ class mymodule(fvwmpy):
 LOGGINGLEVEL = fvwmpy._logging.DEBUG
 
 m = mymodule()
+m.logginglevel = L_DEBUG
 
 ### Keep FVWM mute while we are setting things up
 m.mask       = 0
@@ -159,16 +160,15 @@ m.exit()
 
   String. Naturally contains information about current version.
 
-- **`fvwmpy.LOGGINGLEVEL`**
+- **`fvwmpy.L_CRITICAL`**, **`fvwmpy.L_DEBUG`**, **`fvwmpy.L_ERROR`**,
+  **`fvwmpy.L_INFO`**, **`fvwmpy.L_NOTSET`**, **`fvwmpy.L_WARNING`**
 
-  This is logging level as described in the documentation for the
-  **logging** python module. It affects behaviour of `m.<ligging_fcn>`
-  where `m` is an instance of (derived from) `fvwmpy.fvwmpy` class.
-  You may change the value of `fvwmpy.LOGGINGLEVEL`. This has to be
-  done before instantiating  `fvwmpy.fvwmpy` object.
-  the standard values can be accessed as `fvwmpy._logging.CRITICAL`
-  `fvwmpy._logging.ERROR`, `fvwmpy._logging.WARNING`,
-  `fvwmpy._logging.INFO`, `fvwmpy._logging.DEBUG` and `fvwmpy._logging.NOTSET`
+  Constants for setting logging level.  If `fvwmmodule` is a
+  `fvwmpy.fvwmpy` object, then setting `fvwmmodule.logginglevel` to
+  one of these constants affects behaviour of `fvwmmodule`'s logging
+  functions, as described in the documentation for the **logging**
+  python module.
+  
 ### Helper functions
 
 - **`fvwmpy.split_mask(mask)`**
@@ -177,17 +177,6 @@ m.exit()
   If all the packet types in the list are bitwise `or`ed, one gets the
   `mask` back.
 
-- **`fvwmpy.crit()`**, **`fvwmpy.dbg()`**, **`fvwmpy.err()`**,
-  **`fvwmpy.info()`**, **`fvwmpy.warn()`**
-
-  Logging functions. They should be called
-
-  `fcn(message_string, arguments)`
-
-  and use `message_string.format(arguments)` formatting paradigm. Instances of
-  `fvwmpy.fvwmpy` class have their own similar logging functions.
-  
-  
 ### Exceptions
 
 - **`fvwmpy.FvwmPyException`**
@@ -239,6 +228,15 @@ Instances of `fvwmpy` have the following attributes and methods
   be the same as `m.me`.  `m.alias` can be changed afterwards. Such
   action will affect logging functions and prunning of configuration
   lines.
+
+- **`m.logginglevel`**
+
+  controls the behaviour of logging functions `m.logger`, `m.dbg()`,
+  `m.info()`, `m.warn()`, `m.err()` and `m.crit()`.  It cabe assigned
+  one of the levels `fvwmpy.L_CRITICAL`, `fvwmpy.L_DEBUG`,
+  `fvwmpy.L_ERROR`, `fvwmpy.L_INFO`, `fvwmpy.L_NOTSET` or
+  `fvwmpy.L_WARNING`. Only messages with severety level not less then
+  `m.logginglevel` will be printed.
 
 - **`m.mask`**
 
@@ -368,10 +366,12 @@ Instances of `fvwmpy` have the following attributes and methods
   `m.<log_fcn>(message_string, *arguments)`
   
   and use `message_string.format(*arguments)` formatting paradigm.
-  Logging is directed to *stderr*. For the module *stderr*-stream will
-  be the same as for FVWM. Logging functions print the severity level
-  followed by the alias of the module followed by the formatted
-  message.
+  Logging messages are directed to *stderr*. For the module
+  *stderr*-stream will be the same as for FVWM. Logging functions
+  print the severity level followed by the alias of the module
+  followed by the formatted message. The behaviour of these functions
+  is affected by the value of `m.logginglevel`. Only messages with
+  severity not less then `m.logginglevel` will be printed.
   
 - **`m.sendmessage(msg, context_window=None, finished=False)`**
 

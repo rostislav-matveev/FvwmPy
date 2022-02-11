@@ -9,8 +9,8 @@ setup(
     description = 'Framework for developing FVWM modules in python',
     author = 'Rostislav Matveev',
     author_email = 'rostislav.matveev',
-    url = 'https://github.com/rostislav-matveev/FvwmPy'
-    download_url = 'https://github.com/rostislav-matveev/FvwmPy/releases/tag/v1.0.0',
+    url = 'https://github.com/rostislav-matveev/FvwmPy',
+    download_url = 'https://github.com/rostislav-matveev/FvwmPy/releases/tag/v1.0.1',
     keywords = ['fvwm', 'fvwm module'],
     classifiers = [],
 )

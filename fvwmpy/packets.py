@@ -1,19 +1,25 @@
 import struct
 import sys
-import time as _time
-from .constants import *
-from .exceptions import *
+from   .constants  import *
+from   .exceptions import *
+from   .log        import  _getloggers
 
 ################################################################################
 ### some helpers
 ### convert between our and FVWM packet types 
 def _ptype_f2m(t):
+    """Transform packet type from FVWM representation to fvwmpy 
+    representation.
+    """
     if not t & M_EXTENDED_MSG:
         return t
     else:
         return ( t & (M_EXTENDED_MSG - 1) ) << 32
 
 def _ptype_m2f(t):
+    """Transform packet type from fvwmpy representation to FVWM
+    representation.
+    """
     if t <= M_EXTENDED_MSG:
         return t
     else:
@@ -25,29 +31,30 @@ def _unpack(fmt,body,offset):
     x = struct.unpack_from(fmt,body,offset)
     return x[0] if len(x) == 1 else x
 
-def _dbgprint(*args,**kwargs):
-    kwargs["file"] = sys.stderr
-    print("[FvwmPy.packet]:",*args,**kwargs)
-
-def _relax(*args,**kwargs):
-    pass
-
-_dbgprint = _relax
-
 ################################################################################
 
 class _packet(dict):
     """
-    Instances represent packets received from fvwm.
+    Instances represent packets received from fvwm. 
+ 
     p = FvwmPacket(buf,parse=True,raw=False) 
-        read the packet from buf. If parse==True, parse the packet and 
-        write the corresponding fields into the dictionary.
-        If raw==True, store the raw bytearray in p["raw"].  
+
+    read the packet from buf. If parse==True, parse the packet and 
+    write the corresponding fields into the dictionary.
+    If raw==True, store the raw bytearray in p.raw
+        
+    Items can be equivallently accessed as p.key or p["key"].
+    Attributes always present:
     p.ptype -- integer representing the type of the packet.
                See Fvwm.constants.M[X]_* for the types.
     p.time  -- timestamp
-    p[key]  -- fields of the packet (depend on type)
+
+    Other attributes depend on the type of the packet. 
     """
+    ( logger, dbg, info,
+      warn,   err, crit  ) = _getloggers("fvwmpy:packet")
+    logger.setLevel(L_ERROR)
+    
     ### standard formats for reading packet fields
     ### list of pairs (<name_of_field>, <format>)
     ### formats can be anything acceptable to struct.unpack
@@ -167,40 +174,30 @@ class _packet(dict):
         }
 
     def __init__(self,buf,parse,raw):
-        """
-        Read the packet from buf. If parse==True, parse the packet and 
-        write the corresponding fields into the dictionary.
-        If raw==True, store the raw bytearray in p["raw"].  
-        """
         try:
             (start,ptype,size,time) = struct.unpack_from(
                 "4L", buf.read(LONG_SIZE*4), 0 )
         except struct.error:
-            raise PipeDesync()
+            raise PipeDesync("Can not read the head of the packet")
         if start != FVWM_PACK_START:
             raise PipeDesync(
-                """Pipe desyncronized. 
-                Expected {}, got {} at the beginning of the packet.
-                """.
+                "Expected {}, got {} at the beginning of the packet".
                 format(hex(FVWM_PACK_START),hex(start))
             )
         
         self.ptype = _ptype_f2m(ptype)
         self.time  = time
-        _dbgprint("="*40)
-        _dbgprint(packetnames[self.ptype])
-        _dbgprint(size)
-        
+        self.info("Read {} at {}",packetnames[self.ptype],self.time)
         ### Read and parse the rest of the packet according to the format
         ### corresponding to the type of the packet
-        fmt = self._packetformats[self.ptype]
         body = buf.read(LONG_SIZE * (size-4))
         if raw: self.raw = body
         if not parse: return 
+        fmt = self._packetformats[self.ptype]
         offset = 0
         for field in fmt:
-            _dbgprint("field",field)
-            _dbgprint("offset",offset)
+            self.dbg("field",field)
+            self.dbg("offset",offset)
             if field[1] == "string":
                 self[field[0]] = ( body[offset:].
                                    decode(errors='replace').
@@ -246,7 +243,6 @@ class _packet(dict):
 
     @property
     def name(self):
-        "Return the string containing packet name, as defined in FVWM source"
         return packetnames[self.ptype]
     
     def __getattr__(self,attr):
@@ -256,20 +252,10 @@ class _packet(dict):
         self[attr] = val
 
     def __str__(self):
-        (s, ms) = divmod(self.time,1000)
-        t = _time.localtime(s)
         res = list()
-        res.append( "Fvwm Packet: {} at {}:{}:{}.{}".
-                    format(self.name,t.tm_hour,t.tm_min,t.tm_sec,ms))
+        res.append( "Fvwm Packet: {} at {}".format(self.name,self.time) )
         for k,v in self.items():
             res.append("\t| {} = {}".format(k,v))
         return "\n".join(res)
 
 
-class _packet_reader:
-    def __init__(self, buf):
-        self._buf = buf
-
-    def __call__(self, parse=True, raw=False):
-        return _packet(self._buf, parse=parse, raw=raw)
-        

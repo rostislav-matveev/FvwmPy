@@ -3,6 +3,4 @@
 **/*tmp*
 **/*~
 **/#*#
-examples/*
-FvwmTest.py
-.pypirc
+.#.gitignore

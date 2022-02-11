@@ -1,15 +1,16 @@
 import os as _os
 import sys as _sys
 import struct as _struct
-import logging as _logging
 
-from .constants  import *
-from .packets    import _packet
-from .exceptions import *
+from   .constants  import *
+from   .packets    import _packet
+from   .exceptions import *
+from   .log        import _getloggers
 
 ################################################################################
 ### Some helpers
 def split_mask(mask):
+    "Returns a list of all packet types matching the mask"
     masks = list()
     cmask = 1
     while mask:
@@ -18,59 +19,33 @@ def split_mask(mask):
         cmask <<= 1
     return masks
 
-class _BraceString(str):
-    def __mod__(self, other):
-        return self.format(*other)
-    def __str__(self):
-        return self
 
-
-class _StyleAdapter(_logging.LoggerAdapter):
-    def __init__(self, logger, extra=None):
-        super(_StyleAdapter, self).__init__(logger, extra)
-
-    def process(self, msg, kwargs):
-        msg = _BraceString(msg)
-        return msg, kwargs
-    
-_logging.basicConfig(stream=_sys.stderr)
-
-DEBUGLEVEL = _logging.DEBUG
-
-_l   = _StyleAdapter(_logging.getLogger("fvwmpy"))
-_l.setLevel(LOGGINGLEVEL)
-dbg  = _l.debug
-info = _l.info
-warn = _l.warning
-err  = _l.error
-crit = _l.critical
-
-VERSION = "0.0.1"
+VERSION = "1.0.1"
 
 ################################################################################
 
 class _fvwmvar:
+    """
+    var = _fvwmvar(module)
+    Class for objects that provide access to FVWM variables.
+    """
+
     _sep = " CrazySplitDelimiter3.1415 "
     def __init__(self,module):
         super().__setattr__("_module",module)
         
     def __getattr__(self,var):
+        self._module.push_masks(MX_REPLY | M_ERROR, 0, 0)
         vardots  = var.replace("_",".")
-        savemask       = self._module.mask
-        savesyncmask   = self._module.syncmask
-        savenograbmask = self._module.nograbmask
-        self._module.mask       = MX_REPLY | M_ERROR
-        self._module.syncmask   = 0
-        self._module.nograbmask = 0
-        self._module.sendmessage("Send_Reply $[{}]".format(vardots))
-        p = self._module.packet()
-        self._module.mask       = savemask
-        self._module.syncmask   = savesyncmask
-        self._module.nograbmask = savenograbmask
-        if p.ptype == M_ERROR:
-            self._module.warn(" An error occured: {}",p["string"])
-            return None
-        return p["string"]
+        try:
+            self._module.sendmessage("Send_Reply $[{}]".format(vardots))
+            p = self._module.packet()
+            if p.ptype == M_ERROR:
+                self._module.err("var: {}",p.string)
+                raise FvwmError(p.string)
+        finally:
+            self._module.restore_masks()
+        return p.string
 
     def __setattr__(self,var,val):
         raise IllegalOperation("It is not possible to assign to Fvwm variables")
@@ -79,24 +54,19 @@ class _fvwmvar:
         raise IllegalOperation("It is not possible to delete Fvwm variables")
 
     def __call__(self, *args,context_window=None):
+        self._module.push_masks(MX_REPLY | M_ERROR, 0, 0)
         vardots = ["$[{}]".format(x.replace("_",".")) for x in args]
         varline = self._sep.join(vardots)
-        savemask       = self._module.mask
-        savesyncmask   = self._module.syncmask
-        savenograbmask = self._module.nograbmask
-        self._module.mask       = MX_REPLY | M_ERROR
-        self._module.syncmask   = 0
-        self._module.nograbmask = 0
-        self._module.sendmessage("Send_Reply " + varline,
-                                 context_window = context_window)
-        p = self._module.packet()
-        self._module.mask       = savemask
-        self._module.syncmask   = savesyncmask
-        self._module.nograbmask = savenograbmask
-        if p.ptype == M_ERROR:
-            warn(" An error occured: {}",p["string"])
-            return [ None for a in args ]
-        return(p["string"].split(self._sep))
+        try:
+            self._module.sendmessage(
+                "Send_Reply " + varline, context_window = context_window )
+            p = self._module.packet()
+            if p.ptype == M_ERROR:
+                self._module.err("var: {}",p.string)
+                raise FvwmError(p.string)
+        finally:
+            self._module.restore_masks()
+        return(p.string.split(self._sep))
         
 class _infostore:
     _sep = "CrazySplitDelimiter3.1415"
@@ -104,23 +74,18 @@ class _infostore:
         super().__setattr__("_module",module)
         
     def __getattr__(self,var):
+        self._module.push_masks(MX_REPLY | M_ERROR, 0, 0)
         vardots  = var.replace("_",".")
-        savemask       = self._module.mask
-        savesyncmask   = self._module.syncmask
-        savenograbmask = self._module.nograbmask
-        self._module.mask       = MX_REPLY | M_ERROR
-        self._module.syncmask   = 0
-        self._module.nograbmask = 0
-        self._module.sendmessage("Send_Reply $[infostore.{}]".
-                                 format(vardots))
-        p = self._module.packet()
-        self._module.mask       = savemask
-        self._module.syncmask   = savesyncmask
-        self._module.nograbmask = savenograbmask
-        if p.ptype == M_ERROR:
-            warn("An error occured: {}",p["string"])
-            return None
-        return p["string"]
+        try:
+            self._module.sendmessage("Send_Reply $[infostore.{}]".
+                                     format(vardots))
+            p = self._module.packet()
+            if p.ptype == M_ERROR:
+                self._module.err("infostore: {}", p.string)
+                raise FvwmError(p.string)
+        finally:
+            self._module.restore_masks()
+        return p.string
 
     def __setattr__(self,var,val):
         vardots  = var.replace("_",".")
@@ -132,28 +97,21 @@ class _infostore:
         self._module.sendmessage("InfoStoreRemove {}".format(vardots))
 
     def __call__(self, *args,context_window=None):
+        self._module.push_masks(MX_REPLY | M_ERROR, 0, 0)
         vardots = [ "$[infostore.{}]".format(x.replace("_","."))
                     for x in args ]
         varline = self._sep.join(vardots)
-        savemask       = self._module.mask
-        savesyncmask   = self._module.syncmask
-        savenograbmask = self._module.nograbmask
-        self._module.mask       = MX_REPLY | M_ERROR
-        self._module.syncmask   = 0
-        self._module.nograbmask = 0
-        self._module.sendmessage("Send_Reply " + varline,
-                                 context_window = context_window)
-        p = self._module.packet()
-        self._module.mask       = savemask
-        self._module.syncmask   = savesyncmask
-        self._module.nograbmask = savenograbmask
-        if p.ptype == M_ERROR:
-            warn(" An error occured: {}",p["string"])
-            return None
-        return(p["string"].split(self._sep))
-        
-        
-
+        try:
+            self._module.sendmessage(
+                "Send_Reply " + varline, context_window = context_window )
+            p = self._module.packet()
+            if p.ptype == M_ERROR:
+                self._module.err("infostore: {}",p.string)
+                raise FvwmError(p.string)
+        finally:
+            self._module.restore_masks()
+        return(p.string.split(self._sep))
+ 
 class _window(dict):
     """Instances of _window class are dictionaries
     containing key:value pairs corresponding to the fields in 
@@ -163,6 +121,9 @@ class _window(dict):
     reply to SendWindowList message. It has an additional method
     w.flag(int: i), that gives the value of i^th flag, see 
     file vpacket.h in fvwm source tree for the meaning of the flags.
+    The __str__ method gives some human readable representation of the 
+    instance of the _window class.
+
     ToDo: Access flags by meaningfull names.
     """
 
@@ -174,7 +135,7 @@ class _window(dict):
 
     def flag(self,i):
         """
-        Get i^th flag
+        Get i^th flag as a 0/1 integer
         """
         b,s = divmod(i,8)
         return self.flags[b] & ( 1 << s )
@@ -187,44 +148,48 @@ class _window(dict):
 
     
 class _winlist(dict):
-    """List of all windows.  
+    """Dictionary of all windows indexed by window id's  
 
     Additional method .filter(conditions) gives
-    iterators over windows satisfying conditions.  
-
-    ToDo: Implement all the conditions available in Fvwm conditional
-    commands.
-
-    Currently implemented conditions are 
-    None
+    iterators over windows satisfying conditions, where conditions is a 
+    string of conditions acceptable in FVWM's conditional commands. 
     """
     def __init__(self,module):
         super().__init__()
         super().__setattr__("_module",module)
         
     def filter(self,conditions):
-        self._module.push_masks(M_STRING,0,0)
+        self._module.push_masks(M_STRING|M_ERROR,0,0)
         cl = conditions.splitlines()
         cl = map(lambda x: x.strip(" \t,"),cl)
         cl = filter(None, cl)
         cond = ",".join(cl)
         self._module.dbg( " Use condition {}",cond)
         self._module.sendmessage(
-            "All ({}) SendToModule {} $[w.id]".format(cond,
-                                                      self._module.alias) )
+            "All ({}) SendToModule {} $[w.id]".
+            format(cond, self._module.alias), context_window = 0 )
         self._module.sendmessage(
             "SendToModule {} finishedfilterwindows".
-            format(self._module.alias) )
+            format(self._module.alias), context_window = 0  )
         filteredlist = list()
-        p = self._module.packet()
-        self._module.dbg( "Got {}",p.string )
-        while p.string.startswith("0x"):
-            filteredlist.append( int(p.string,0) )
+        try:
             p = self._module.packet()
             self._module.dbg( "Got {}",p.string )
+            while p.ptype & M_STRING and p.string.startswith("0x"):
+                filteredlist.append( int(p.string,0) )
+                p = self._module.packet()
+                self._module.dbg( "Got {}",p.string )
+            if p.ptype & M_ERROR:
+                self._module.err("winlist: {}",p.string)
+                raise FvwmError(p.string)
+        finally:
+            self._module.restore_masks()
+
+        ### Shall we just return a list of windows?
+        ### Perhaps we just want to count them?
         for wid in filteredlist:
             yield self[wid]
-        self._module.restore_masks()
+
 
 class _config(list):
     _max_colorsets = int("0x40",16)
@@ -240,32 +205,21 @@ class fvwmpy:
     """Base class for developing Fvwm modules"""
    
     def __init__(self):
-        self.config       = _config()
         self.me     = _os.path.split(_sys.argv[0])[1]
-        self.logger = _StyleAdapter(_logging.getLogger(self.alias))
-        self.logger.setLevel(LOGGINGLEVEL)
-        self.dbg    = self.logger.debug
-        self.info   = self.logger.info
-        self.warn   = self.logger.warning
-        self.err    = self.logger.error
-        self.crit   = self.logger.critical
-        # self.dbg(" Starting...")
         if len(_sys.argv) < 6:
             raise FvwmLaunch("{}: Should only be executed by fvwm!".
-                             format(self.me))
-        # self.dbg(" Arguments: {}",_sys.argv)
+                             format(self.alias))
         try:
             self._tofvwm     = _os.fdopen(int(_sys.argv[1]), "wb")
             self._fromfvwm   = _os.fdopen(int(_sys.argv[2]), "rb")
         except:
             raise FvwmLaunch("{}: Can not open read/write pipes".
-                             format(self.me))
-        self.dbg(" Opened pipes")
+                             format(self.alias))
         self.context_window = int(_sys.argv[4],0)
         self.context_deco   = int(_sys.argv[5],0);
         if _sys.argv[6:]:
             if not _sys.argv[6].startswith('-'):
-                self.alias = _sys.argv[6]
+                self._alias = _sys.argv[6]
                 self.args =  _sys.argv[7:]
             elif _sys.argv[6] == '-':
                 self.args =  _sys.argv[7:]
@@ -273,18 +227,25 @@ class fvwmpy:
                 self.args =  _sys.argv[6:]
         else:
             self.args = list()
+
+        ( self.logger, self.dbg, self.info,
+          self.warn,   self.err, self.crit  ) = _getloggers(self.alias)
+        self.logginglevel = L_INFO
+
         self.handlers     = { pack : [] for pack in packetnames }
-        ### 
+        ### We have to do that because mask.setter assumes 
+        ### that _mask already exists.
         self._mask        = -1
         self._syncmask    = -1
         self._nograbmask  = -1
-        self.mask        = 0
-        self.syncmask    = 0
-        self.nograbmask  = 0
-        self.mask_stack  = list()
-        self.winlist     = _winlist(self)
-        self.var         = _fvwmvar(self)
-        self.infostore   = _infostore(self)
+        self.mask         = 0
+        self.syncmask     = 0
+        self.nograbmask   = 0
+        self._mask_stack   = list()
+        self.winlist      = _winlist(self)
+        self.config       = _config()
+        self.var          = _fvwmvar(self)
+        self.infostore    = _infostore(self)
         
     @property
     def alias(self):
@@ -293,21 +254,20 @@ class fvwmpy:
         except AttributeError:
             return self.me
 
-    @alias.setter
-    def alias(self,val):
-        del self.crit, self.err, self.warn, self.info, self.dbg, self.logger
-        self._alias = val
-        self.logger = _StyleAdapter(_logging.getLogger(self.alias))
-        self.dbg    = self.logger.debug
-        self.info   = self.logger.info
-        self.warn   = self.logger.warning
-        self.err    = self.logger.error
-        self.crit   = self.logger.critical
-        ### How do I let FVWM know, that I should be known by my alias,
-        ### e.g for SendToModule command?
-    
+    @property
+    def logginglevel(self):
+        return self.logger.level
+
+    @logginglevel.setter
+    def logginglevel(self,val):
+        self.logger.setLevel(val)
+            
     def sendmessage(self,msg, context_window=None, finished=False):
-        "Send a string(s) to fvwm using window context"
+        """Send a possibly multiline string to fvwm using window context.
+        If context_window==None, use self.context_window
+        If finished, notify FVWM the the module has finished working and 
+        will exit soon.
+        """
         if context_window is None:
             context_window = self.context_window
         lines = map( lambda x: x.strip(), msg.splitlines() )
@@ -420,64 +380,75 @@ class fvwmpy:
         self._nograbmask_set(m)
 
     def push_masks(self,mask,syncmask,nograbmask):
+        "Temporarily assign new values to masks"
         if mask       is None: mask       = self.mask
         if syncmask   is None: syncmask   = self.syncmask
         if nograbmask is None: nograbmask = self.nograbmask
-        self.mask_stack.append( (self.mask,self.syncmask,self.nograbmask) )
-        self.mask       = mask
-        self.syncmask   = syncmask
-        self.nograbmask = nograbmask
+        self._mask_stack.append( (self.mask,self.syncmask,self.nograbmask) )
+        self.mask, self.syncmask, self.nograbmask = (
+            mask, syncmask, nograbmask ) 
         
     def restore_masks(self):
+        "Restore previous values of masks"
         try:
-           self.mask, self.syncmask, self.nograbmask = self.mask_stack.pop() 
+           self.mask, self.syncmask, self.nograbmask = self._mask_stack.pop() 
         except IndexError:
             raise IllegalOperation(
                 "Can not restore masks. Mask stack is empty" )
         
     def getconfig(self, handler=None, match=None):
+        """Ask FVWM for module configuration information matching match 
+        ('*'+alias if mask==None).
+        Pass the reply packets to handler (h_saveconfig if handler==None)
+        """
         self.push_masks( M_FOR_CONFIG | M_ERROR, 0, 0)
-        if handler is None:
-            handler = self.h_saveconfig
-        if match is None:
-            match = "*" + self.alias
-        if handler == self.h_saveconfig:
-            ### reset the config database
+        if handler is None: handler = self.h_saveconfig
+        if match   is None: match   = "*" + self.alias
+        if handler is self.h_saveconfig:
             self.config = _config()
+        self.sendmessage("Send_ConfigInfo {}".format(match))
         try:
-            self.sendmessage("Send_ConfigInfo {}".format(match))            
-            while True:
-                p = self.packet()
+            p = self.packet()
+            while not p.ptype & (M_ERROR | M_END_CONFIG_INFO):
                 handler(p)
-                if p.ptype == M_END_CONFIG_INFO: break
-        except Exception as e:
-            raise e
+                p = self.packet()
+            if p.ptype & M_ERROR:
+                self.err("getconfig: {}",p.string)
+                raise FvwmError(p.string)
         finally:
-            ### restore masks
             self.restore_masks()
             
     def getwinlist(self, handler = None):
+        """Ask FVWM for the list of all windows.
+        Pass replies to handler (h_updatewl if handler==None)
+        """
         self.push_masks( M_FOR_WINLIST | M_ERROR, 0, 0 )
-        if handler is None:
-            handler = self.h_updatewl
-        self.winlist.clear()
+        if handler is None: handler = self.h_updatewl
+        if handler is self.h_updatewl: self.winlist.clear()
+        self.sendmessage("Send_WindowList")
         try:
-            self.sendmessage("Send_WindowList")
-            while True:
-                p = self.packet()
+            p = self.packet()
+            while not p.ptype & (M_ERROR | M_END_WINDOWLIST):
                 handler(p)
-                if p.ptype == M_END_WINDOWLIST : break
-        except Exception as e:
-            raise e
+                p = self.packet()
+            if p.ptype & M_ERROR:
+                self.err("getwinlist: {}",p.string)
+                raise FvwmError(p.string)
         finally:
             self.restore_masks()
 
     def register_handler(self,mask,handler):
+        """Add handler to the end of execution queues for all packets 
+        matching mask.
+        """
         for m in self.handlers:
             if (m & mask) and not (handler in self.handlers[m]):
                 self.handlers[m].append(handler)
 
     def unregister_handler(self,mask,handler):
+        """Remove handler from all execution queues for packets matching 
+        masks. If handler is not in a queue, do nothing.
+        """
         for m in self.handlers:
             if (m & mask):
                 try:
@@ -486,16 +457,22 @@ class fvwmpy:
                     continue
 
     def call_handlers(self,p):
+        """Execute all handlers in the queue for the packet p in the order 
+        they were registered.
+        """
         for h in self.handlers[p.ptype]:
             h(p)
-        return p
         
     def clear_handlers(self,mask):
+        """Clear all queues for packets matching mask."""
         for h in self.handlers[p.ptype]:
             if h & mask:
                 self.handlers[p.ptype] = list()
          
     def registered_handler(self,handler):
+        """Return the mask matching all packet types for which handler 
+        is registered.
+        """
         mask = 0
         for m in self.handlers:
             if handler in self.handlers[m]:
@@ -505,12 +482,23 @@ class fvwmpy:
             
     ### HANDLERS
     def h_saveconfig(self,p):
+        """Handler. Packet types: M_FOR_CONFIG.
+
+        This handler simply stores the information in the packet in the 
+        config database.
+        If packet p has other type IllegalOperation exception is raised.
+        """
         if p.ptype == M_END_CONFIG_INFO: return
-        cl = p["string"].lower()
+        if not p.ptype & M_FOR_CONFIG:
+            raise IllegalOperation(
+                "Packet must have type matching M_FOR_CONFIG" )
+        cl = p.string.lower()
         if cl.startswith("*"):
-            self.config.append(p["string"])
+            ### We append p.string and not cl bacause config lines may
+            ### be case sensetive.
+            self.config.append(p.string)
         elif cl.startswith("colorset"):
-            ### ToDo: parse
+            ### ToDo: parse colorsets
             cll = cl.split()
             self.config.colorsets[int(cll[1],16)]=cll[2:]
         elif cl.startswith("desktopsize"):
@@ -528,28 +516,49 @@ class fvwmpy:
             cll = cl.split()[1:]
             self.config.IgnoreModifiers = tuple([int(x) for x in cll])
         else:
-            IllegalOperation("Can not parse the packet")
+            IllegalOperation("Can not parse the packet: {}".format(p.string))
             
     def h_unlock(self, p):
+        """Handler. Packet types: M_ALL.
+
+        This handler sends 'NOP UNLOCK' command to FVWM. It should be added to 
+        the end of queues for packets in syncmask.
+        """
         self.unlock()
         
     ### Update winlist
     def h_updatewl(self,p):
-        if not p.ptype & M_FOR_WINLIST & ~M_END_WINDOWLIST: return
+        """Handler. Packet types: M_FOR_WINLIST | M_DESTROY_WINDOW
+
+        This handler updates the winlist database with the information in the 
+        packet p.
+        """
+        if not p.ptype & M_FOR_WINLIST | M_DESTROY_WINDOW:
+            raise IllegalOperation(
+                "Packet must have type matching M_FOR_WINLIST or M_DESTROY_WINDOW" )
         if p.ptype == M_DESTROY_WINDOW:
             try:
-                del self.winlist[ p["window"] ]
+                del self.winlist[p.window]
             except KeyError():
                 pass
-            return
-        if p["window"] not in self.winlist:
-            self.winlist[ p["window"] ] = _window()
-        self.winlist[ p["window"] ].update(p)
+        else:
+            if p.window not in self.winlist:
+                self.winlist[p.window] = _window()
+        self.winlist[p.window].update(p)
 
     def h_exit(self,p):
+        """Handler. Packtet types: M_ALL.
+
+        Exit the module.
+        """
         self.exit()
 
     def run(self):
+        """Mainloop.
+
+        Read packets and execute corresponding handlers. If PipeDesync 
+        exception is raised, try to resync the pipe and go on.
+        """
         self.dbg(" Start main loop")
         while True:
             try:
