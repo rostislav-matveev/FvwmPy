@@ -3,7 +3,7 @@ import sys as _sys
 import struct as _struct
 
 from   .constants  import *
-from   .packets    import _packet
+from   .packets    import _packet_reader
 from   .exceptions import *
 from   .log        import _getloggers
 
@@ -39,7 +39,7 @@ class _fvwmvar:
         vardots  = var.replace("_",".")
         try:
             self._module.sendmessage("Send_Reply $[{}]".format(vardots))
-            p = self._module.packet()
+            p = self._module.packet.read()
             if p.ptype == M_ERROR:
                 self._module.err("var: {}",p.string)
                 raise FvwmError(p.string)
@@ -60,7 +60,7 @@ class _fvwmvar:
         try:
             self._module.sendmessage(
                 "Send_Reply " + varline, context_window = context_window )
-            p = self._module.packet()
+            p = self._module.packet.read()
             if p.ptype == M_ERROR:
                 self._module.err("var: {}",p.string)
                 raise FvwmError(p.string)
@@ -79,7 +79,7 @@ class _infostore:
         try:
             self._module.sendmessage("Send_Reply $[infostore.{}]".
                                      format(vardots))
-            p = self._module.packet()
+            p = self._module.packet.read()
             if p.ptype == M_ERROR:
                 self._module.err("infostore: {}", p.string)
                 raise FvwmError(p.string)
@@ -104,7 +104,7 @@ class _infostore:
         try:
             self._module.sendmessage(
                 "Send_Reply " + varline, context_window = context_window )
-            p = self._module.packet()
+            p = self._module.packet.read()
             if p.ptype == M_ERROR:
                 self._module.err("infostore: {}",p.string)
                 raise FvwmError(p.string)
@@ -173,11 +173,11 @@ class _winlist(dict):
             format(self._module.alias), context_window = 0  )
         filteredlist = list()
         try:
-            p = self._module.packet()
+            p = self._module.packet.read()
             self._module.dbg( "Got {}",p.string )
             while p.ptype & M_STRING and p.string.startswith("0x"):
                 filteredlist.append( int(p.string,0) )
-                p = self._module.packet()
+                p = self._module.packet.read()
                 self._module.dbg( "Got {}",p.string )
             if p.ptype & M_ERROR:
                 self._module.err("winlist: {}",p.string)
@@ -241,11 +241,12 @@ class fvwmpy:
         self.mask         = 0
         self.syncmask     = 0
         self.nograbmask   = 0
-        self._mask_stack   = list()
+        self._mask_stack  = list()
         self.winlist      = _winlist(self)
         self.config       = _config()
         self.var          = _fvwmvar(self)
         self.infostore    = _infostore(self)
+        self.packet       = _packet_reader(self)
         
     @property
     def alias(self):
@@ -287,19 +288,6 @@ class fvwmpy:
                                           FINISHED) ) )
         self._tofvwm.flush()
         
-    def packet(self, parse=True, raw=False):
-        """
-        M.packet(parse=True, raw=False)
-
-        Return a dictionary with two additional attributes:
-           p.ptype  -- the type of the packet
-           p.time   --- the time stamp
-        Obtained by reading fvwm packet from the pipe, 
-        parse(?)ing it and writing the content into appropriate fields. 
-        And adding raw(?) content to the "raw" field.
-        """
-        return _packet(self._fromfvwm, parse=parse, raw=raw)
-
     def resync(self):
         self.warn(" Resync the from-fvwm pipe. Package(s) may be lost.")
         found = False
@@ -408,10 +396,10 @@ class fvwmpy:
             self.config = _config()
         self.sendmessage("Send_ConfigInfo {}".format(match))
         try:
-            p = self.packet()
+            p = self.packet.read()
             while not p.ptype & (M_ERROR | M_END_CONFIG_INFO):
                 handler(p)
-                p = self.packet()
+                p = self.packet.read()
             if p.ptype & M_ERROR:
                 self.err("getconfig: {}",p.string)
                 raise FvwmError(p.string)
@@ -427,10 +415,10 @@ class fvwmpy:
         if handler is self.h_updatewl: self.winlist.clear()
         self.sendmessage("Send_WindowList")
         try:
-            p = self.packet()
+            p = self.packet.read()
             while not p.ptype & (M_ERROR | M_END_WINDOWLIST):
                 handler(p)
-                p = self.packet()
+                p = self.packet.read()
             if p.ptype & M_ERROR:
                 self.err("getwinlist: {}",p.string)
                 raise FvwmError(p.string)
@@ -562,10 +550,9 @@ class fvwmpy:
         self.dbg(" Start main loop")
         while True:
             try:
-                p = self.packet()
+                p = self.packet.read()
                 self.call_handlers(p)
             except PipeDesync as e:
                 self.warn(" Pipe desyncronised: {}".e.args)
                 self.warn(" Trying to resync the pipe. Some packets may be lost")
                 self.resync()
-            
