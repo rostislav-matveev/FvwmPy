@@ -40,9 +40,6 @@ class mymodule(fvwmpy):
         ### respond to the pack
     ...
 
-### Let's have lot's of debugging output
-LOGGINGLEVEL = fvwmpy._logging.DEBUG
-
 m = mymodule()
 m.logginglevel = L_DEBUG
 
