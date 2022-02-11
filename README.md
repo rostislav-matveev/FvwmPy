@@ -29,7 +29,7 @@ following lines
 #!/usr/bin/python3
 import fvwmpy
 
-class mymodule(fvwmpy):
+class myfvwmmodule(fvwmpy.fvwmpy):
     def h_config(self,pack):
         ### process config lines from FVWM database
 	
@@ -40,8 +40,8 @@ class mymodule(fvwmpy):
         ### respond to the pack
     ...
 
-m = mymodule()
-m.logginglevel = L_DEBUG
+m = myfvwmmodule()
+m.logginglevel = fvwmpy.L_DEBUG
 
 ### Keep FVWM mute while we are setting things up
 m.mask       = 0
