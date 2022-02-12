@@ -1,9 +1,10 @@
 #!/usr/bin/python3
 
 from fvwmpy import *
+import sys
 
 class fvwmmymod(fvwmpy):
-    def dumppack(self,p):
+    def h_dumppack(self,p):
         print(p,file=self.packfile)
         self.packfile.flush()
         
@@ -75,12 +76,38 @@ class fvwmmymod(fvwmpy):
             self.command("mask")
         elif cmd == "config":
             self.getconfig(match = "")
+        elif cmd == "configdelay":
+            self.push_masks(M_ALL,0,0)
+            self.sendmessage("Send_ConfigInfo")
+            self.info("="*40)
+            time.sleep(5)
+            self.info("-"*40)
+            self.sendmessage("Send_ConfigInfo")
+        elif cmd == "pick":
+            mp = picker_factory(mask=M_FOR_CONFIG,string=glob("color*"))
+            self.push_masks(M_ALL,0,0)
+            self.sendmessage("Send_ConfigInfo")
+            self.sendmessage("Send_WindowList")
+            time.sleep(1)
+            self.info("Pick first")
+            (p, ) = self.packets.pick(mp,which="first")
+            self.info("Got")
+            print(p,file=sys.stderr)
+            self.info("Pick last")
+            (p, ) = self.packets.pick(mp,which="last")
+            self.info("Got")
+            print(p,file=sys.stderr)
+            self.info("Pick all")
+            packs = self.packets.pick(mp,which="all")
+            self.info("Got {}",len(packs))
+            time.sleep(10)
+            self.restore_masks()
         elif cmd == "winlist":
             self.getwinlist()
         elif cmd == "exit":
             self.exit(0)
         elif cmd == "sendmessage":
-            self.message(" ".join(args))
+            self.sendmessage(" ".join(args))
         elif cmd == "dumpwinlist":
             with open("winlist.txt","wt") as file:
                 print(self.winlist,file=file)
@@ -104,10 +131,11 @@ class fvwmmymod(fvwmpy):
         
 m=fvwmmymod()
 m.logginglevel = L_INFO
-m.mask         = M_STRING | MX_REPLY | M_ERROR
+m.mask         = M_STRING | MX_REPLY | M_ERROR | M_FOR_CONFIG | MX_ENTER_WINDOW
 m.syncmask     = 0
 m.nograbmask   = 0
 m.packfile = open('packfile.txt',"wt",buffering=1<<20)
+m.register_handler(M_ALL,m.h_dumppack)
 m.register_handler(M_STRING, m.h_cmd)
 m.info("Start {} as {}",m.me,m.alias)
 m.run()

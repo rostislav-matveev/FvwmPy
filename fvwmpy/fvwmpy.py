@@ -119,7 +119,7 @@ class _window(dict):
     M_CONFIGURE_WINDOW packet and other window packets, see
     fvwmpy.constants.M_FOR_WINLIST constant.
     Besides they contain additional values sent by fvwm during
-    reply to SendWindowList message. It has an additional method
+    reply to Send_WindowList message. It has an additional method
     w.flag(int: i), that gives the value of i^th flag, see 
     file vpacket.h in fvwm source tree for the meaning of the flags.
     The __str__ method gives some human readable representation of the 
@@ -231,7 +231,7 @@ class fvwmpy:
 
         ( self.logger, self.debug, self.info,
           self.warn,   self.error, self.critical  ) = _getloggers(self.alias)
-        self.logginglevel = L_DEBUG
+        self.logginglevel = L_INFO
 
         self.handlers     = { pack : [] for pack in packetnames }
         ### We have to do that because mask.setter assumes 

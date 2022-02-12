@@ -260,7 +260,9 @@ class packet(dict):
         res = list()
         res.append( "Fvwm Packet: {} at {}".format(self.name,self.time) )
         for k,v in self.items():
-            if self.logger.level <= L_ERROR and k=="body": continue 
+            if ( self.logger.getEffectiveLevel() <= L_ERROR and
+                 k=="body"):
+                continue 
             elif k=="time": continue
             elif k in {"window","frame"}:
                 res.append("\t| {} = {:x}".format(k,v))
