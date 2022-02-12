@@ -6,7 +6,7 @@ from logging import DEBUG    as L_DEBUG
 from logging import ERROR    as L_ERROR
 from logging import INFO     as L_INFO
 from logging import NOTSET   as L_NOTSET
-from logging import WARNING  as L_WARNING
+from logging import WARN     as L_WARN
 
 ################################################################################
 ### FVWM contexts

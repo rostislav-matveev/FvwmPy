@@ -2,10 +2,11 @@ import os as _os
 import sys as _sys
 import struct as _struct
 
-from   .constants  import *
-from   .packets    import _packet_reader
-from   .exceptions import *
-from   .log        import _getloggers
+from   .constants     import *
+from   .packet_reader import *
+from   .packet_reader import _packet_reader
+from   .exceptions    import *
+from   .log           import _getloggers
 
 ################################################################################
 ### Some helpers
@@ -39,9 +40,9 @@ class _fvwmvar:
         vardots  = var.replace("_",".")
         try:
             self._module.sendmessage("Send_Reply $[{}]".format(vardots))
-            p = self._module.packet.read()
+            p = self._module.packets.read()
             if p.ptype == M_ERROR:
-                self._module.err("var: {}",p.string)
+                self._module.error("var: {}",p.string)
                 raise FvwmError(p.string)
         finally:
             self._module.restore_masks()
@@ -60,9 +61,9 @@ class _fvwmvar:
         try:
             self._module.sendmessage(
                 "Send_Reply " + varline, context_window = context_window )
-            p = self._module.packet.read()
+            p = self._module.packets.read()
             if p.ptype == M_ERROR:
-                self._module.err("var: {}",p.string)
+                self._module.error("var: {}",p.string)
                 raise FvwmError(p.string)
         finally:
             self._module.restore_masks()
@@ -79,9 +80,9 @@ class _infostore:
         try:
             self._module.sendmessage("Send_Reply $[infostore.{}]".
                                      format(vardots))
-            p = self._module.packet.read()
+            p = self._module.packets.read()
             if p.ptype == M_ERROR:
-                self._module.err("infostore: {}", p.string)
+                self._module.error("infostore: {}", p.string)
                 raise FvwmError(p.string)
         finally:
             self._module.restore_masks()
@@ -104,9 +105,9 @@ class _infostore:
         try:
             self._module.sendmessage(
                 "Send_Reply " + varline, context_window = context_window )
-            p = self._module.packet.read()
+            p = self._module.packets.read()
             if p.ptype == M_ERROR:
-                self._module.err("infostore: {}",p.string)
+                self._module.error("infostore: {}",p.string)
                 raise FvwmError(p.string)
         finally:
             self._module.restore_masks()
@@ -164,7 +165,7 @@ class _winlist(dict):
         cl = map(lambda x: x.strip(" \t,"),cl)
         cl = filter(None, cl)
         cond = ",".join(cl)
-        self._module.dbg( " Use condition {}",cond)
+        self._module.debug( " Use condition {}",cond)
         self._module.sendmessage(
             "All ({}) SendToModule {} $[w.id]".
             format(cond, self._module.alias), context_window = 0 )
@@ -173,14 +174,14 @@ class _winlist(dict):
             format(self._module.alias), context_window = 0  )
         filteredlist = list()
         try:
-            p = self._module.packet.read()
-            self._module.dbg( "Got {}",p.string )
+            p = self._module.packets.read()
+            self._module.debug( "Got {}",p.string )
             while p.ptype & M_STRING and p.string.startswith("0x"):
                 filteredlist.append( int(p.string,0) )
-                p = self._module.packet.read()
-                self._module.dbg( "Got {}",p.string )
+                p = self._module.packets.read()
+                self._module.debug( "Got {}",p.string )
             if p.ptype & M_ERROR:
-                self._module.err("winlist: {}",p.string)
+                self._module.error("winlist: {}",p.string)
                 raise FvwmError(p.string)
         finally:
             self._module.restore_masks()
@@ -228,9 +229,9 @@ class fvwmpy:
         else:
             self.args = list()
 
-        ( self.logger, self.dbg, self.info,
-          self.warn,   self.err, self.crit  ) = _getloggers(self.alias)
-        self.logginglevel = L_INFO
+        ( self.logger, self.debug, self.info,
+          self.warn,   self.error, self.critical  ) = _getloggers(self.alias)
+        self.logginglevel = L_DEBUG
 
         self.handlers     = { pack : [] for pack in packetnames }
         ### We have to do that because mask.setter assumes 
@@ -246,7 +247,7 @@ class fvwmpy:
         self.config       = _config()
         self.var          = _fvwmvar(self)
         self.infostore    = _infostore(self)
-        self.packet       = _packet_reader(self)
+        self.packets      = _packet_reader(self)
         
     @property
     def alias(self):
@@ -280,7 +281,7 @@ class fvwmpy:
                                            _struct.pack("L",len(l)),
                                            l,
                                            NOT_FINISHED) ) )
-            self.dbg(" Send message {}",l)
+            self.debug(" Send message {}",l)
         if finished :
             self._tofvwm.write(b''.join( (cw,
                                           _struct.pack("L",3),
@@ -288,27 +289,15 @@ class fvwmpy:
                                           FINISHED) ) )
         self._tofvwm.flush()
         
-    def resync(self):
-        self.warn(" Resync the from-fvwm pipe. Package(s) may be lost.")
-        found = False
-        while not found:
-            peek     = self._fromfvwm.peek()
-            position = peek.find(FVWM_PACK_START_b)
-            if position == -1:
-                self._fromfvwm.read(len(peek))
-            else:
-                self._fromfvwm.read(position)
-                found = True
-            
     def finishedstartup(self):
-        self.dbg("FINISHED STARTUP")
+        self.debug("FINISHED STARTUP")
         self.sendmessage("NOP FINISHED STARTUP")
         
     def exit(self,n=0):
         self.unlock(finished=True)
         self._tofvwm.close()
         self._fromfvwm.close()
-        self.dbg(" Exit")
+        self.debug(" Exit")
         _sys.exit(n)
 
     def unlock(self,finished=False):
@@ -396,12 +385,12 @@ class fvwmpy:
             self.config = _config()
         self.sendmessage("Send_ConfigInfo {}".format(match))
         try:
-            p = self.packet.read()
+            p = self.packets.read()
             while not p.ptype & (M_ERROR | M_END_CONFIG_INFO):
                 handler(p)
-                p = self.packet.read()
+                p = self.packets.read()
             if p.ptype & M_ERROR:
-                self.err("getconfig: {}",p.string)
+                self.error("getconfig: {}",p.string)
                 raise FvwmError(p.string)
         finally:
             self.restore_masks()
@@ -415,12 +404,12 @@ class fvwmpy:
         if handler is self.h_updatewl: self.winlist.clear()
         self.sendmessage("Send_WindowList")
         try:
-            p = self.packet.read()
+            p = self.packets.read()
             while not p.ptype & (M_ERROR | M_END_WINDOWLIST):
                 handler(p)
-                p = self.packet.read()
+                p = self.packets.read()
             if p.ptype & M_ERROR:
-                self.err("getwinlist: {}",p.string)
+                self.error("getwinlist: {}",p.string)
                 raise FvwmError(p.string)
         finally:
             self.restore_masks()
@@ -543,16 +532,13 @@ class fvwmpy:
 
     def run(self):
         """Mainloop.
-
-        Read packets and execute corresponding handlers. If PipeDesync 
-        exception is raised, try to resync the pipe and go on.
+        Read packets and execute corresponding handlers. 
         """
-        self.dbg(" Start main loop")
+        self.debug(" Start main loop")
         while True:
-            try:
-                p = self.packet.read()
-                self.call_handlers(p)
-            except PipeDesync as e:
-                self.warn(" Pipe desyncronised: {}".e.args)
-                self.warn(" Trying to resync the pipe. Some packets may be lost")
-                self.resync()
+            p = self.packets.read()
+            self.call_handlers(p)
+            
+
+
+    

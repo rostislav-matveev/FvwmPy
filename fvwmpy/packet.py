@@ -1,6 +1,5 @@
 import struct
 import sys
-import threading
 import time
 
 from   .constants  import *
@@ -36,8 +35,8 @@ def _unpack(fmt,body,offset):
 
 ################################################################################
 
-### _packet does the actual reading and parsing
-class _packet(dict):
+### packet does the actual reading and parsing
+class packet(dict):
     """
     Instances are packets received from fvwm. 
  
@@ -50,12 +49,12 @@ class _packet(dict):
                See Fvwm.constants.M[X]_* for the types.
     p.name  -- string representation of the type of the packet.
     p.time  -- timestamp
-    p.raw   -- bytearray containing the body of the packet withou the header
+    p.body  -- bytearray containing the body of the packet without the header
  
     Other attributes depend on the type of the packet. 
     """
-    ( logger, dbg, info,
-      warn,   err, crit  ) = _getloggers("fvwmpy:packet")
+    ( logger, debug, info,
+      warn,   error, critical  ) = _getloggers("fvwmpy:packet")
     logger.setLevel(L_ERROR)
     
     ### standard formats for reading packet fields
@@ -80,7 +79,7 @@ class _packet(dict):
                  ("idx", "L"), ("idy", "L"),
                  ("fx", "L"), ("fy", "L"),
                  ("fdx", "L"), ("fdy", "L") )
-    ### empty packet
+    ### empty packet or just save the raw body
     _empty   = tuple()
 
     ### ignore 3 unsigned longs 
@@ -127,11 +126,11 @@ class _packet(dict):
                             ("max_x", "L"), ("max_y", "L"), ("nx", "L"),
                             ("ny", "L") ),
         M_NEW_DESK:       ( ("desk", "L"), ),
-        M_OLD_ADD_WINDOW: ( ("body", "raw"), ),
+        M_OLD_ADD_WINDOW: _empty,
         M_RAISE_WINDOW:   _wid,
         M_LOWER_WINDOW:   _wid,
         M_OLD_CONFIGURE_WINDOW:
-                          ( ("body", "raw"), ),
+                          _empty,
         M_FOCUS_CHANGE:   ( ("window", "L"), ("frame", "L"),
                             ("focus_change_type", "L"), ("text_pix", "L"),
                             ("border_pix", "L") ),
@@ -163,7 +162,7 @@ class _packet(dict):
         M_RESTACK:        ( ( "win_stack", "listof", "3L" ), ),
         M_ADD_WINDOW:     _addwindow,
         M_CONFIGURE_WINDOW: _addwindow,
-        M_EXTENDED_MSG:   ( ("body", "raw"), ),
+        M_EXTENDED_MSG:     _empty,
 
         MX_VISIBLE_ICON_NAME:
                           _wid + ( ("ico_vis_name", "string"), ),
@@ -173,7 +172,7 @@ class _packet(dict):
                           ( ("prop_type", "L"), ("val_1", "L"), ("val_2", "L"),
                             ("prop_str", "string") ),
         MX_REPLY:         _wid + ( ("string", "string"), ),
-        M_UNKNOWN1:        ( ("body", "raw"), )
+        M_UNKNOWN1:       _empty
         }
 
     def __init__(self,buf):
@@ -193,12 +192,13 @@ class _packet(dict):
         ### Read and parse the rest of the packet according to the format
         ### corresponding to the type of the packet
         body = buf.read(LONG_SIZE * (size-4))
-        self.raw = body
+        ### save the raw body of the packet
+        self.body = body
         fmt = self._packetformats[self.ptype]
         offset = 0
         for field in fmt:
-            self.dbg("field",field)
-            self.dbg("offset",offset)
+            self.debug("field",field)
+            self.debug("offset",offset)
             if field[1] == "string":
                 self[field[0]] = ( body[offset:].
                                    decode(errors='replace').
@@ -226,18 +226,19 @@ class _packet(dict):
                     self[field[0]] = _unpack(field[1], body, offset)
                 except struct.error:
                     raise PipeDesync(
-                        """While parsing packet {}:
-                        Format doesn't match the body of the packet 
-                        (body of the packet is too short)
-                        """.format(packetnames[self.ptype]))
+                        "While parsing packet {}: ".format(packetnames[self.ptype]) +
+                        "Format doesn't match the body of the packet " +
+                        "(body of the packet is too short)" )
+
                 offset += struct.calcsize( field[1] )
             ### There are variable length packs with optional fields at
             ### the end, like M_ICONIFY, so we break if the body of the pack
             ### is exhosted.
             if offset == len(body): break
         if offset != len(body):
-            raise PipeDesync("Format doesn't match the body of the\
-            packet (body of the packet is too long")
+            self.info( "While parsing packet {}: " +
+                       "Body of the packet is too long",
+                       packetnames[self.ptype] )
         ### remove dummies
         if "" in self: del self[""]
 
@@ -255,135 +256,15 @@ class _packet(dict):
     def __delattr__(self,attr):
         del self[attr]
 
-    def clean(self):
-        del self["raw"]
-        return self
-    
     def __str__(self):
         res = list()
         res.append( "Fvwm Packet: {} at {}".format(self.name,self.time) )
         for k,v in self.items():
-            if k in {"raw", "time"}: continue
-            res.append("\t| {} = {}".format(k,v))
+            if self.logger.level <= L_ERROR and k=="body": continue 
+            elif k=="time": continue
+            elif k in {"window","frame"}:
+                res.append("\t| {} = {:x}".format(k,v))
+            else:
+                res.append("\t| {} = {}".format(k,v))
         return "\n".join(res)
 
-
-class _packet_reader:
-    ( logger, dbg, info,
-      warn,   err, crit  ) = _getloggers("fvwmpy:packetreader")
-    logger.setLevel(L_ERROR)
-
-    def __init__(self,module):
-        self._pipe         = module._fromfvwm
-        self._queue        = list()
-        self._lockread     = threading.Lock()
-        self._lockqueue    = threading.Lock()
-        self._readerthread = threading.Thread( target=self._reader )
-        self.dbg(" Start readerthread")
-        self._readerthread.start()
-
-    def _reader(self):
-        ### ToDo I need to handle PipeDesync here!
-        while True:
-            self._lockread.acquire()
-            self.dbg("thread: Waiting for the packet")
-            p = _packet(self._pipe)
-            self.dbg("thread: got {} at {}",p.name,p.time)
-            self._lockqueue.acquire()
-            self._queue.append(p)
-            self._lockqueue.release()
-            self._lockread.release()
-            ### Let's give a bit of time to the reader in the main thread
-            time.sleep(0.001)
-
-    def read(self,blocking=True,keep=False):
-        if not self._queue:
-            self.dbg("main: queue is empty")
-            if blocking:
-                self.dbg("main: waiting for the threaded reader")
-                self._lockread.acquire()
-                self._lockread.release()
-                self.dbg("main: threaded reader yielded something")
-            else:
-                ### there are no packets and we have to return
-                self.dbg("main: returning None")
-                return None
-        ### here queue can not be empty
-        p = self._queue[0]
-        if not keep:
-            self._lockqueue.acquire()
-            del self._queue[0]
-            self._lockread.release()
-        self.dbg(
-            "main: there is a packet in the queue: {} at {}",p.name,p.time )
-        return p
-
-    def resync(self):
-        self.warn(
-            " Resync the from-fvwm pipe. Package(s) may be lost.")
-        found = False
-        while not found:
-            peek     = self._fromfvwm.peek()
-            position = peek.find(FVWM_PACK_START_b)
-            if position == -1:
-                self._fromfvwm.read(len(peek))
-            else:
-                self._fromfvwm.read(position)
-                found = True
-                
-    def peek(self,blocking=True):
-        return( self(blocking=blocking, keep=True) )
-    
-    def __len__(self):
-        return len(self._queue)
-
-    def clear(self):
-        self._lockqueue.acquire()
-        self._queue.clear()
-        self._lockqueue.release()
-        
-    def pick( self, picker, which="first", keep=False, timeout=500 ):
-        start = 0
-        ipacks = 0
-        ### walk through the queue twice if necessary
-        ### waiting for timeout before the second go
-        for i in range(2):
-            self._lockqueue.acquire()
-            iq = enumerate(self.queue[start:],start)
-            ipacks += list(filter( lambda ip: picker(ip[1]), iq))
-            ### for the second go
-            start = len(self._queue)
-            self._lockqueue.release()
-            if ipack:
-                ### found something
-                break
-            else:
-                ### let's have another chance
-                time.sleep(timeout/1000)
-        if not ipacks:
-            ### There is nothing
-            return tuple()
-        if which == "first":
-            i, p = ipacks[0]
-            if not keep:
-                self._lockqueue.acquire()
-                del self._queue[i]
-                self._lockqueue.release()
-            return (p,)
-        elif which == "last":
-            i, p = ipacks[-1]
-            if not keep:
-                self._lockqueue.acquire()
-                del self._queue[i]
-                self._lockqueue.release()
-            return (p,)
-        elif which == "all":
-            if not keep:
-                self._lockqueue.acquire()
-                for i,p in ipacks:
-                    del self._queue[i]
-                self._lockqueue.release()
-            return tuple( (p for i,p in ipacks) )
-        else:
-            raise ValueError(
-                "which must be one of 'first', 'last' or 'all'" )

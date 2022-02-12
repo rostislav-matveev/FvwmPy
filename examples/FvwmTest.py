@@ -7,11 +7,6 @@ class fvwmmymod(fvwmpy):
         print(p,file=self.packfile)
         self.packfile.flush()
         
-    def packet(self,*args,**kwargs):
-        p = super().packet(*args,**kwargs)
-        self.dumppack(p)
-        return p
-    
     def command(self,cmd):
         args = cmd.split()
         cmd = args[0]
@@ -29,10 +24,10 @@ class fvwmmymod(fvwmpy):
                 "SendToModule {} stop".
                 format(self.alias) )
             windows = list()
-            p=self.packet()
+            p=self.packets.read()
             while p.string != "stop":
                 windows.append(p.string.split())
-                p = self.packet()
+                p = self.packets.read()
                 
             for w in windows:
                 cw = int(w[0],0)
@@ -112,7 +107,7 @@ m.logginglevel = L_INFO
 m.mask         = M_STRING | MX_REPLY | M_ERROR
 m.syncmask     = 0
 m.nograbmask   = 0
-m.packfile = open('packfile.txt',"wt")
+m.packfile = open('packfile.txt',"wt",buffering=1<<20)
 m.register_handler(M_STRING, m.h_cmd)
 m.info("Start {} as {}",m.me,m.alias)
 m.run()
