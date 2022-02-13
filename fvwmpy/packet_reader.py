@@ -2,7 +2,6 @@ import struct
 import sys
 import threading
 import time
-import fnmatch
 
 from   .constants  import *
 from   .exceptions import *
@@ -11,11 +10,9 @@ from   .packet     import packet
 
 ################################################################################
 ### some helpers
-( logger, debug, info,
-  warn,   error, critical  ) = _getloggers(':PacketReader')
-logger.setLevel(L_DEBUG)
-################################################################################
 
+################################################################################
+###
 class _packet_reader:
     
     def __init__(self,module):
@@ -25,7 +22,7 @@ class _packet_reader:
         ( self.logger, self.debug, self.info,
           self.warn,   self.error, self.critical  ) = _getloggers(
               module.alias+':packetreader')
-        self.logger.setLevel(L_DEBUG)
+        self.logger.setLevel(L_WARN)
         self._pipe            = module._fromfvwm
         self._queue           = list()
         self._queue_nonempty  = threading.Event()
@@ -34,7 +31,7 @@ class _packet_reader:
         self._reader_thread   = threading.Thread( target = self._reader,
                                                   name   = "reader_thread",
                                                   daemon = True            )
-        self.debug(" Start readerthread as daemon")
+        self.debug(" Start reader_thread as daemon")
         self._reader_thread.start()
 
 
@@ -66,7 +63,7 @@ class _packet_reader:
                 self._queue_nonempty.set()
             finally:
                 if self._queue_lock.locked(): self._queue_lock.release()
-            ### Slow it down for debugging. DON'T FORGET!
+            ### Slow it down for debugging. DON'T FORGET!!!
             time.sleep(0.001)
 
     def read(self,blocking=True,keep=False):
@@ -135,12 +132,13 @@ class _packet_reader:
         t = 0
         tstep = 10
         while t <= timeout:
+            ### ToDo: don't check all, if which in {"first","last"}!!!
             self._queue_lock.acquire()
             iq = enumerate(self._queue[start:],start)
-            # ipacks += list(filter( lambda ip: picker(ip[1]), iq))
+            ipacks += list(filter( lambda ip: picker(ip[1]), iq))
             ### for debug DONT FORGET!!!
-            for i, p in iq:
-                if picker(p): ipacks.append((i,p))
+            # for i, p in iq:
+                # if picker(p): ipacks.append((i,p))
             ### for the next go
             start = len(self._queue)
             self._queue_lock.release()
@@ -149,6 +147,7 @@ class _packet_reader:
                 break
             else:
                 ### let's have another chance
+                ### and give time for the threaded reader to fill the queue
                 t += tstep
                 time.sleep(tstep/1000)
         if not ipacks:
@@ -184,83 +183,4 @@ class _packet_reader:
         else:
             raise ValueError(
                 "parameter `which` must be one of 'first', 'last' or 'all'" )
-
-class picker:
-    def __init__(self,fcn=None):
-        if fcn is None: self.fcn = lambda p: True
-        else:           self.fcn = fcn
-        
-    def __call__(self,p):
-        return self.fcn(p)
-    
-    def __and__(self,other):
-        def fcn(p):
-            return self.fcn(p) and other.fcn(p)
-        return picker(fcn)
-
-    __rand__ = __and__
-    
-    def __or__(self,other):
-        def fcn(p):
-            return self.fcn(p) or other.fcn(p)
-        return picker(fcn)
-
-    __ror__ = __or__
-    
-    def __invert__(self):
-        def fcn(p):
-            return not self.fcn(p)
-        return picker(fcn)
-    
-
-def picker_factory(mask=None,**kwargs):
-    fcns = list()
-    m = mask
-    kw = kwargs.copy()
-    def fcn(p):
-        if m is not None:
-            # debug("Check {}=p['ptype'] ?= {}",
-                  # bin(p.get("ptype")),bin(m))
-            if not bool(p["ptype"] & mask): return False
-        for k,v in kw.items():
-            # debug("Check {}=p[{}] ?= {}",p.get(k),k,v)
-            if not ( k in p and p[k] == v ): return False
-        return True
-    return picker(fcn)
-
-class glob(str):
-    def __str__(self):
-        return "glob('{}')".format(super().__str__())
-    
-    __repr__ = __str__
-
-    def __eq__(self,other):
-        if not isinstance(other,str):
-            raise TypeError(
-                "glob() can only match strings not {} objects".
-                format(other.__class__) )
-        return fnmatch.fnmatchcase(other.lower(),self.lower())
-    
-    def __ne__(self,other):
-        return not self.__eq__(other)
-
-class Glob(str):
-    def __str__(self):
-        return "Glob('{}')".format(super().__str__())
-    
-    __repr__ = __str__
-
-    def __eq__(self,other):
-        if not isinstance(other,str):
-            raise TypeError(
-                "glob() can only match strings not {} objects".
-                format(other.__class__) )
-        return fnmatch.fnmatchcase(str.__str__(other),str.__str__(self))
-    
-    def __ne__(self,other):
-        return not self.__eq__(other)
-
-
-
-
 

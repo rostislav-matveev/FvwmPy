@@ -34,8 +34,8 @@ def _unpack(fmt,body,offset):
     return x[0] if len(x) == 1 else x
 
 ################################################################################
-
 ### packet does the actual reading and parsing
+
 class packet(dict):
     """
     Instances are packets received from fvwm. 
@@ -55,7 +55,7 @@ class packet(dict):
     """
     ( logger, debug, info,
       warn,   error, critical  ) = _getloggers("fvwmpy:packet")
-    logger.setLevel(L_ERROR)
+    logger.setLevel(L_WARN)
     
     ### standard formats for reading packet fields
     ### list of pairs (<name_of_field>, <format>)
@@ -188,7 +188,7 @@ class packet(dict):
         
         self.ptype = _ptype_f2m(ptype)
         self.time  = time
-        self.info("Read {} at {}",packetnames[self.ptype],self.time)
+        self.debug("Read {} at {}",packetnames[self.ptype],self.time)
         ### Read and parse the rest of the packet according to the format
         ### corresponding to the type of the packet
         body = buf.read(LONG_SIZE * (size-4))
@@ -226,7 +226,8 @@ class packet(dict):
                     self[field[0]] = _unpack(field[1], body, offset)
                 except struct.error:
                     raise PipeDesync(
-                        "While parsing packet {}: ".format(packetnames[self.ptype]) +
+                        "While parsing packet {}: ".
+                        format(packetnames[self.name]) +
                         "Format doesn't match the body of the packet " +
                         "(body of the packet is too short)" )
 
@@ -236,13 +237,13 @@ class packet(dict):
             ### is exhosted.
             if offset == len(body): break
         if offset != len(body):
-            self.info( "While parsing packet {}: " +
-                       "Body of the packet is too long",
-                       packetnames[self.ptype] )
+            ### Shall we raise en exception here???
+            self.error( "While parsing packet {}: " +
+                        "Body of the packet is too long",
+                        packetnames[self.ptype] )
         ### remove dummies
         if "" in self: del self[""]
-
-
+        
     @property
     def name(self):
         return packetnames[self.ptype]
