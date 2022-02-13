@@ -39,7 +39,7 @@ class myfvwmmodule(fvwmpy.fvwmpy):
     ...
 
 m = myfvwmmodule()
-m.logginglevel = fvwmpy.L_DEBUG
+m.logger.setLevel(fvwmpy.L_DEBUG)
 
 ### Keep FVWM mute while we are setting things up
 m.mask       = 0
@@ -50,36 +50,40 @@ m.nograbmask = 0
 for arg in m.args:
    ### process arg
 
-### Read FVWM's database of module configuration lines and parse them
-### using `m.h_config` handler
-m.getconfig(m.h_config)
+### If we want to dynamically update configuration:
+m.register_handler(fvwmpy.M_SENDCONFIG, m.h_config)
+
+### If we want to have up to date list of windows
+m.register_handler(fvwmpy.M_FOR_WINLIST, m.h_updatewl)
 
 ### Register handlers
 m.register_handler(mask1,m.h_handler1)
 m.register_handler(mask2,m.h_handler2)
 ...
 
-### Tell FVWM that we are ready
-m.finishedconfig()
-
 ### set masks
 m.mask       = <some mask>
 m.syncmask   = <some smask>
 m.nograbmask = <some ngmask>
 
-### If we want to dynamically update configuration:
-m.getconfig()
-m.register_handler(fvwmpy.M_SENDCONFIG, m.h_saveconfig)
-m.mask |= fvwmpy.M_SENDCONFIG | fvwmpy.M_CONFIGINFO
+### for up to date windowlist
+m.mask |= fvwmpy.M_FOR_WINLIST
+
+### for updating config dynamically
+m.mask |= fvwmpy.M_SENDCONFIG 
 
 ### If we want FVWM to wait while we update config
 m.syncmask |= fvwmpy.M_SENDCONFIG
 m.register_handler(fvwmpy.M_SENDCONFIG, m.h_unlock)
 
-### If we want to have up to date list of windows
+### Tell FVWM that we are ready
+m.finishedconfig()
+
+### Read FVWM's database of module configuration lines and parse them
+m.getconfig(m.h_config)
+
+### Fill the winlist database
 m.getwinlist()
-m.register_handler(fvwmpy.M_FOR_WINLIST, m.h_updatewl)
-m.mask |= fvwmpy.M_FOR_WINLIST
 
 ### Do some other module stuff
 m.info(" Looks like FVWM manages {} windows now",len(m.winlist))
