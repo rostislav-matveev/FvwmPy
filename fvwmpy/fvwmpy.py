@@ -317,6 +317,9 @@ class fvwmpy:
         except AttributeError:
             return self.me
 
+    def sendmessage_hook(self,msg,context_window,finished):
+        pass
+    
     def sendmessage(self,msg, context_window=None, finished=False):
         """Send a possibly multiline string to fvwm using in context 
         window_context.
@@ -343,6 +346,7 @@ class fvwmpy:
                                           b'NOP',
                                           FINISHED) ) )
         self._tofvwm.flush()
+        self.sendmessage_hook()
         
     def finishedstartup(self):
         self.debug("FINISHED STARTUP")
@@ -648,6 +652,11 @@ class fvwmpy:
         """
         self.exit()
 
+    def h_nop(self,p):
+        pass
+
+    h_pass = h_nop
+    
     def run(self):
         """Mainloop.
         Read packets and execute corresponding handlers. 
