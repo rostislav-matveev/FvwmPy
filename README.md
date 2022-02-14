@@ -11,6 +11,7 @@ I love FVWM
 
 ## Features
 - Simple interface for communication with the window manager.
+- Asyncronous access to the packet queue.
 - Possibility of maintaining dynamically updated list of windows and
   their properties.
 - Possibility to iterate over windows satisfying given conditions.  
@@ -29,13 +30,13 @@ import fvwmpy
 
 class myfvwmmodule(fvwmpy.fvwmpy):
     def h_config(self,pack):
-        ### process config lines from FVWM database
+        # process config lines from FVWM database
 	
     def h_handler1(self,pack):
-        ### respond to the pack
+        # respond to the pack
 
     def h_handler2(self,pack):
-        ### respond to the pack
+        # respond to the pack
     ...
 
 m = myfvwmmodule()
@@ -48,10 +49,14 @@ m.nograbmask = 0
 
 ### Check command line arguments
 for arg in m.args:
-   ### process arg
+   # process arg
 
 ### If we want to dynamically update configuration:
 m.register_handler(fvwmpy.M_SENDCONFIG, m.h_config)
+
+### If we want to keep config database up to date:
+m.register_handler(fvwmpy.M_SENDCONFIG, m.h_saveconfig)
+
 
 ### If we want to have up to date list of windows
 m.register_handler(fvwmpy.M_FOR_WINLIST, m.h_updatewl)
@@ -79,6 +84,9 @@ m.register_handler(fvwmpy.M_SENDCONFIG, m.h_unlock)
 ### Tell FVWM that we are ready
 m.finishedconfig()
 
+### Fill the config database
+m.getconfig()
+
 ### Read FVWM's database of module configuration lines and parse them
 m.getconfig(m.h_config)
 
@@ -87,6 +95,7 @@ m.getwinlist()
 
 ### Do some other module stuff
 m.info(' Looks like FVWM manages {} windows now',len(m.winlist))
+...
 
 ### If the module is persistent (listens to FVWM and executes handlers)
 m.run()
@@ -96,7 +105,9 @@ m.exit()
 
 More snippets and examples are below.
 
-## Structure of the module
+## Structure of the `fvwmpy` module
+
+The module define the following constants, functions and classes.
 
 ### Constants
 The following constants are defined within the module
@@ -123,7 +134,9 @@ The following constants are defined within the module
 
   Integers.
   
-  Types of packets send from FVWM to the module. See [FVWM module
+  Types of packets send from FVWM to the module. See section
+  **packets**
+  [FVWM module
   interface](https://www.fvwm.org/Archive/ModuleInterface/) for the
   full list and meaning of packet types and other details.  In
   addition there are the following masks:
@@ -149,7 +162,7 @@ The following constants are defined within the module
 
 - **`fvwmpy.FVWM_PACK_START`** and **`fvwmpy.FVWM_PACK_START_b`**
 
-  Delimiter used by FVWM at the start of each packet.
+  Delimiter used by FVWM to tag the start of each packet.
   `FVWM_PACK_START` is an integer and `FVWM_PACK_START_b` is its
   bytes representation.
 
@@ -254,7 +267,8 @@ The following constants are defined within the module
 
   The difference between `glob` and `Glob` is that in the former
   matching is case insensitive, while objects of the later match
-  string in a case-sensitive way.
+  string in a case-sensitive way, so
+  `'abc*efg?xyz' == Glob('*c[*]EFg[?]x??')`  will be `False`.
 
 
 ### Class `fvwmpy.fvwmpy`
@@ -445,7 +459,17 @@ Instances of `fvwmpy` have the following attributes and methods
 
   Send a (possibly multi-line) message to FVWM for execution in the
   context of `context_window`.
-  
+
+  `msg` is a multi-line string conatining FVWM commands. Empty lines
+  (only with white spaces) are ignored. For example
+  the following works
+  ```
+  cmds="""
+       Focus
+       WarpToWindow {} {}
+       """
+  m.sendmessage(cmd.format(30,50), context_window = wid )
+  ```
   If `context_window` is not given or `None`, then the window context
   will be equal to the context at which module was called (that is
   `m.context_window`). If `context_window==0`, then FVWM executes
@@ -453,6 +477,7 @@ Instances of `fvwmpy` have the following attributes and methods
 
   If `finished` then FVWM will be notified that the module is done
   working and is about to exit soon.
+
   Every time `m.sendmessage(...)` is executed `m.sendmessage_hook()`
   with the same arguments will also be called.
   `m.sendmessage_hook()` does nothing, but can be overloaded, for
@@ -520,7 +545,7 @@ Instances of `fvwmpy` have the following attributes and methods
   ```
   m.getconfig()
   m.register_handler(fvwmpy.M_SENDCONFIG, m.h_saveconfig)
-  m.mask |= fvwmpy.M_FOR_WINLIST
+  m.mask |= fvwmpy.M_SENDCONFIG
   ```
   somewhere in your code.
 
@@ -540,18 +565,28 @@ Instances of `fvwmpy` have the following attributes and methods
   `fvwmpy.M_DESTROY_WINDOW` packets removing corresponding entries
   from the database.
 
+  It is not necessary to adjust the values of the masks before or
+  after invoking `fvwmpy.getwinlist()`. It works independently of the
+  current values of masks and preserves them.
+  
   This method works reliably independently of the state of the packet
   queue. Even if queue is not empty at the start of this call,
-  configuration packets will be found in the queue and removed from
+  `fvwmpy.M_FOR_WINDOWLIST`-type packets will be found in the queue and removed from
   it. So the following works reliably
   ```
-  ### Pollute the queue
+    ### Pollute the queue
   m.sendmessage('Send_ConfigInfo')
   ### Now queue is full of packets
+
+  ### Mute FVWM
+  m.mask = 0
+
   m.getwinlist()
   ### m.winlist is updated and the corresponding packets are
   ### removed from the queue
 
+  ### m.mask is still 0
+  
   # handle the packets remaining in the queue
   ```
 
@@ -635,7 +670,8 @@ Instances of `fvwmpy` have the following attributes and methods
   Execute all handlers in the queue corresponding to the `pack`'s
   packet type passing packet `pack` to them. The default mainloop calls
   `m.call_handlers()` on all packets received from FVWM except those
-  which are removed from the queue by `m.get*` methods.
+  which are removed from the queue by `m.get*` methods or
+  `m.packets.pick(...,keep=False)` method.
 
 - **`m.clear_handlers(mask)`**
 
