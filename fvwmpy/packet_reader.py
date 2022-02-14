@@ -14,6 +14,7 @@ from   .packet     import packet
 ################################################################################
 ###
 class _packet_reader:
+    """Instance of the _packet_reader class represents the packet queue."""
     
     def __init__(self,module):
         ### I have to do it here because I need module.alias
@@ -67,6 +68,7 @@ class _packet_reader:
             time.sleep(0.001)
 
     def read(self,blocking=True,keep=False):
+        """Read the packet from the top of the queue"""
         ### Let's see if something bad happened in the thread.
         self.raise_thread_exception()
         self.debug( "main: queue size={}; queue_nonempty={}",
@@ -93,7 +95,10 @@ class _packet_reader:
         return p
 
     def peek(self,blocking=True):
-        return( self(blocking=blocking, keep=True) )
+        """Read the packet from the top of the queue, but leave
+        in the queue.
+        """
+        return( self.read(blocking=blocking, keep=True) )
 
     def raise_thread_exception(self):
         if self._thread_exception:
@@ -106,6 +111,7 @@ class _packet_reader:
             raise e
 
     def resync(self):
+        """Seek the pipe to the start of the next packet"""
         found = False
         while not found:
             peek     = self._fromfvwm.peek()
@@ -120,11 +126,15 @@ class _packet_reader:
         return len(self._queue)
 
     def clear(self):
+        "Clear the queue."
         self._queue_lock.acquire()
         self._queue.clear()
         self._queue_lock.release()
         
     def pick( self, picker, which="first", keep=False, timeout=500 ):
+        """Find all/first/last packet in the queue for which picker 
+        evaluates to True
+        """
         start = 0
         ipacks = list()
         ### walk through the queue, if  nothing found

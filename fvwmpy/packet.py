@@ -246,6 +246,9 @@ class packet(dict):
         
     @property
     def name(self):
+        """
+        Return the string representation of the type of the packet
+        """
         return packetnames[self.ptype]
     
     def __getattr__(self,attr):

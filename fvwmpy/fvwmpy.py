@@ -14,7 +14,8 @@ from   .picker        import picker, glob, Glob
 ################################################################################
 ### Some helpers
 def split_mask(mask):
-    "Returns a list of all packet types matching the given mask"
+    """Returns a list of all packet types matching the given mask
+    """
     masks = list()
     cmask = 1
     while mask:
@@ -24,6 +25,11 @@ def split_mask(mask):
     return masks
 
 class _unique_id:
+    """
+    Instance of _unique_id is a callable object that returns a unique
+    string with every invocation
+    """
+    
     uid = int(_time.perf_counter()*1000000000)
     def __call__(self,fmt="unique_id_0x{:x}"):
         self.uid += 1
@@ -55,7 +61,7 @@ class _fvwmvar:
     variable names.
     context_window is id of the window in which context variable are to be 
     expanded. If None the the module's context window is assumed.
-    If 0 no context is assumed.
+    If context_window is 0, then no context is assumed.
     E.g. provided that window with id equal cwid exists
 
     var("w.name","pointer.wx","pointer_wy",context_window=cwid) 
@@ -68,6 +74,8 @@ class _fvwmvar:
     If a variable with the given name does not exist
     literal string '$[<name.of.var>]' is returned in either access
     methods. 
+
+    The way this object works does not depend on the packet queue being empty.
     """
 
     _sep = "CrazySplitDelimiter3.1415"
@@ -119,6 +127,8 @@ class _infostore:
     If a variable with the given anme is absent from the FVWM's infostore 
     database, literal string '$[infostore.<name.of.var>]' is returned in 
     either access method. 
+
+    The way this object works does not depend on the packet queue being empty.
     """
     
     _sep = "|CrazySplitDelimiter3.1415|"
@@ -188,10 +198,10 @@ class _window(dict):
     
     
 class _winlist(dict):
-    """Dictionary of all windows indexed by window id's  
+    """Dictionary of all windows indexed by window id's.  
 
     Additional method .filter(conditions) gives an
-    iterators over windows satisfying conditions, where conditions is a 
+    iterator over windows satisfying conditions, where conditions is a 
     string of conditions acceptable to FVWM's conditional commands and 
     have the same meaning.
     """
@@ -200,6 +210,12 @@ class _winlist(dict):
         super().__setattr__("_module",module)
                 
     def filter(self,conditions):
+        """Return an iterator cycling through windows satisfying
+        conditions.
+
+        conditions  -- a multi-line string containing condition as in 
+        FVWM's conditional commands.
+        """
         self._module.push_masks(M_STRING|M_ERROR,0,0)
         cl = conditions.splitlines()
         cl = map(lambda x: x.strip(" \t,"),cl)
@@ -226,8 +242,6 @@ class _winlist(dict):
         finally:
             self._module.restore_masks()
                    
-        ### Shall we just return a list of windows?
-        ### Perhaps we just want to count them?
         for wid in filteredlist:
             yield self[wid]
 
@@ -238,6 +252,22 @@ class _winlist(dict):
         return "\n\n".join(res)
 
 class _config(list):
+    """Objects of this class contain configuration information
+    supplied by FVWM in reply to Send_ConfigInfo command
+    
+    It is a list of module configuration lines.
+
+    Additional attributes are:
+        c.DesktopSize
+        c.ImagePath
+        c.XineramaConfig
+        c.ClickTime
+        c.IgnoreModifiers
+        c.colorsets
+
+    c.colorsets is a tuple if lists. Each list correspond to a colorset
+    """
+
     _max_colorsets = int("0x40",16)
     def __init__(self):
         self.DesktopSize  = (None, None)
@@ -318,6 +348,12 @@ class fvwmpy:
             return self.me
 
     def sendmessage_hook(self,msg,context_window,finished):
+        """This method is called by m.sendmessage() method
+        and is passed the same arguments.
+        
+        It doesn't do anything, but can be overloaded in a 
+        derived class.
+        """
         pass
     
     def sendmessage(self,msg, context_window=None, finished=False):
@@ -325,7 +361,7 @@ class fvwmpy:
         window_context.
         If context_window==None, use context window in which module was 
         invoked. If context_window==0, use no context.
-        If finished, notify FVWM the the module has finished working and 
+        If finished, notify FVWM that the module has finished working and 
         will exit soon.
         """
         if context_window is None:
@@ -349,10 +385,17 @@ class fvwmpy:
         self.sendmessage_hook(msg, context_window, finished)
         
     def finishedstartup(self):
+        """
+        Notify FVWM, that the module has finished configuring itself
+        and is ready to work
+        """
+        
         self.debug("FINISHED STARTUP")
         self.sendmessage("NOP FINISHED STARTUP")
         
     def exit(self,n=0):
+        """Exit from the module with exit status n"""
+        
         self.unlock(finished=True)
         self._tofvwm.close()
         self._fromfvwm.close()
@@ -360,17 +403,34 @@ class fvwmpy:
         _sys.exit(n)
 
     def unlock(self,finished=False):
+        """
+        Send "NOP UNLOCK" command to FVWM.
+        If finished=True, tell FVWM that the module will exit soon
+        """
+        
         self.sendmessage("NOP UNLOCK",finished)
 
     def mask_setter_hook(self, mask_type, m):
+        """
+        This is executed whenever m.mask, m.syncmask or m.grabmask 
+        are set to new values. 
+        
+        mask_type is one of 'mask', 'syncmask' or 'nograbmask'.
+        m is the new value of the mask. It does nothing,
+        but can be overloaded in derived classes.
+        """
         pass
         
     @property
     def mask(self):
+        """Set or get mask. FVWM is notified of new value.
+        """
         return self._mask
  
     @mask.setter
     def mask(self,m):
+        """Set or get mask. FVWM is notified of new value
+        """
         if self._mask == m: return
         self._mask = m
         ml = self._mask & ( M_EXTENDED_MSG - 1 )
@@ -380,6 +440,9 @@ class fvwmpy:
 
     @property
     def syncmask(self):
+        """Set or get syncmask. FVWM is notified of new value.
+        """
+
         return self._syncmask
 
     @syncmask.setter
@@ -393,6 +456,8 @@ class fvwmpy:
         
     @property
     def nograbmask(self):
+        """Set or get nograbmask. FVWM is notified of new value.
+        """
         return self._nograbmask
 
     @nograbmask.setter
@@ -423,6 +488,9 @@ class fvwmpy:
                 "Can not restore masks. Mask stack is empty" )
 
     def getreply(self,msg,context_window=None):
+        """Send a string to FVWM in context context_window
+        get the reply and return it
+        """
         if context_window is None:
             context_window = self.context_window
         uid = unique_id()
@@ -456,8 +524,8 @@ class fvwmpy:
             return packs[-1].string.replace(uid,"")
 
     def getconfig(self, handler=None, match=None):
-        """Ask FVWM for module configuration information.
-        ('*'+alias if mask==None).
+        """Ask FVWM for module configuration information matching
+        string in parameter match ('*'+m.alias if match==None).
         Pass the reply packets to handler (h_saveconfig if handler==None)
         """
 
@@ -653,6 +721,10 @@ class fvwmpy:
         self.exit()
 
     def h_nop(self,p):
+        """Handler. Packet types: M_ALL.
+
+        Do nothing.
+        """
         pass
 
     h_pass = h_nop
