@@ -684,7 +684,7 @@ Instances of `fvwmpy` have the following attributes and methods
 - **`m.run()`**
 
   Enter mainloop which simply reads packets from FVWM and for each
-  packet executes handlers in the corresponding queue, until
+  packet executes handlers in the queue, until
   `m.exit()` or `m.h_exit()` method is called. It could be overloaded
   in the derived class.
   
@@ -701,10 +701,10 @@ Instances of `fvwmpy` have the following attributes and methods
   ```
   m.getconfig()
   m.register_handler(fvwmpy.M_FOR_CONFIG, m.h_saveconfig)
-  m.mask |= M_SENDCONFIG | M_CONFIG_INFO
+  m.mask |= fvwmpy.M_SENDCONFIG | fvwmpy.M_CONFIG_INFO
   ### If you want to process config in a synchronous manner
   m.register_handler(fvwmpy.M_FOR_CONFIG, m.h_unlock)
-  m.syncmask |= M_FOR_CONFIG
+  m.syncmask |= fvwmpy.M_SENDCONFIG|fvwmpy.M_FOR_CONFIG
   ```
   `m.h_saveconfig(pack)` does not send *NOP UNLOCK* command to FVWM.
   In case you want to process configuration information synchronously
@@ -726,7 +726,7 @@ Instances of `fvwmpy` have the following attributes and methods
   m.unregister_handler(fvwmpy.M_ALL, m.h_unlock)
   m.register_handler(m.syncmask, m.h_unlock)
   ```
-  to make sure that  `m.h_unlock(pack)` is the last one in the queues
+  to make sure that  `m.h_unlock` is the last one in the queues
   
 - **`m.h_exit(pack)`**
 
@@ -766,69 +766,71 @@ infostore database in a transparent manner.
 
 - **`m.var`**
 
-One can access FVWM variables in two ways
+  One can access FVWM variables in two ways
 
-1. `m.var.<var_name_with_underscores>` will be equal to the value of
-   FVWM variable as a string. FVWM variables often have a dot in their
-   names. To use this method you have to replace dots with
-   underscores. That is `m.var.w_id` will return the value `$[w.id]`.
-   You can not assign to or delete FVWM variables, so
-   `m.var.w_id = <value>` or `del m.var.w_id` will raise
-   `fvwmpy.IllegalOperation()` exception.
+  1. `m.var.<var_name_with_underscores>` will be equal to the value of
+      FVWM variable as a string. FVWM variables often have a dot in
+      their names. To use this method you have to replace dots with
+      underscores. That is `m.var.w_id` will return the value
+      `$[w.id]`.  You can not assign to or delete FVWM variables, so
+      `m.var.w_id = <value>` or `del m.var.w_id` will raise
+      `fvwmpy.IllegalOperation()` exception.
 
-2. `m.var('var_name1',...,context_window=None)` will return a tuple
-   with string-values of variables, whose names are given as string
-   arguments. It is not necessary (but allowed) to replace dots with
-   underscore in variable names, when using this method. If
-   `context_window == None` then module's context_window is
-   assumed. If `context_window == 0` then variable values are obtained
-   outside of any context.
+   2. `m.var('var_name1',...,context_window=None)` will return a tuple
+      with string-values of variables, whose names are given as string
+      arguments. It is not necessary (but allowed) to replace dots
+      with underscore in variable names, when using this method. If
+      `context_window == None` then module's context_window is
+      assumed. If `context_window == 0` then variable values are
+      obtained outside of any context.
 
-The second method obtains all variable values in one communication cycle
-with FVWM, so it is preferable, when values of several variables are needed.
+  The second method obtains all variable values in one communication
+  cycle with FVWM, so it is preferable, when values of several
+  variables are needed.
 
-It is not possible to get value of a variable, whose name contains
-underscore. To the best of my knowledge there are no such variables,
-at least none are mentioned in the FVWM man pages.
+  It is not possible to get value of a variable, whose name contains
+  underscore. To the best of my knowledge there are no such variables,
+  at least none are mentioned in the FVWM man pages.
 
-Similarly, one can access FVWM infostore database in two ways
+- **`m.var`**
 
-1. `m.infostore.<var_name_with_underscores>` will be equal to the
-   value of FVWM infostore variable as a string. You have to replace
-   dots with underscores in variable names. For example
-   `m.infostore.my_variable` will return the FVWM's expansion of
-   `$[infostore.my.variable]`.  You can also assign to or delete
-   FVWM infostore variables, so
-   `m.infostore.my_variable = <value>` or
-   `del m.infostore.my_variable` are legal.
+  Similarly, one can access FVWM infostore database in two ways
 
-2. Similarly `m.infostore('var_name1',...)` will return a tuple
-   with string-values of variables, whose names are given as string
-   arguments. It is not necessary (but allowed) to replace dots with
-   underscore in variable names. 
+  1. `m.infostore.<var_name_with_underscores>` will be equal to the
+      value of FVWM infostore variable as a string. You have to
+      replace dots with underscores in variable names. For example
+      `m.infostore.my_variable` will return the FVWM's expansion of
+      `$[infostore.my.variable]`.  You can also assign to or delete
+      FVWM infostore variables, so `m.infostore.my_variable = <value>`
+      or `del m.infostore.my_variable` are legal.
 
-The second method obtains all variable values in one communication cycle
-with FVWM, so it is preferable, when values of several variables are needed.
+  2. Similarly `m.infostore('var_name1',...)` will return a tuple with
+      string-values of variables, whose names are given as string
+      arguments. It is not necessary (but allowed) to replace dots
+      with underscore in variable names.
+
+  The second method obtains all variable values in one communication cycle
+  with FVWM, so it is preferable, when values of several variables are needed.
    
-Beware that it is not possible to get the value of an infostore variable,
-whose name contains underscore. 
+  Beware that it is not possible to get the value of, assign to, or
+  delete an infostore variable, whose name contains underscore.
 
-  Access methods for both FVWM variables and infostore variables work
-  reliably independently of the state of the packet queue. So you may
-  have some stale packets in the queue and still get the values.
+Access methods for both FVWM variables and infostore variables work
+reliably independently of the state of the packet queue. So you may
+have some stale packets in the queue and still get the values.
   
-  Note that each access attempt results in communication with FVWM, so it
-  is better access once and store values, if needed.
-  ```
-  ### Bad practice, 4 communication cycles with FVWM
-  area      = int(m.var.w_width) * int(m.var.w_height)
-  perimeter = 2*int(m.var.w_width) + 2*int(m.var.w_height)
+Note that each access attempt results in communication with FVWM, so it
+is better access once and store values, if needed.
+```
+### Bad practice, 4 communication cycles with FVWM
+area      = int(m.var.w_width) * int(m.var.w_height)
+perimeter = 2*int(m.var.w_width) + 2*int(m.var.w_height)
 
-  ### Good practice, 1 communication with FVWM
-  width, height = map( int, m.var('w.width','w.height') )
-  area      = width * height
-  perimeter = 2 * (width + height)
-  ```
+### Good practice, 1 communication with FVWM
+width, height = map( int, m.var('w.width','w.height') )
+area      = width * height
+perimeter = 2 * (width + height)
+```
 
 
 #### Winlist database **`m.winlist`**
@@ -866,7 +868,7 @@ and one extra described below.
   Note that `winlist.filter` may have troubles, if the
   winlist database is not up to date.
 
-  Winlist has __str__ method which gives some nice human readable
+  Winlist has \_\_str\_\_ method which gives some nice human readable
   representation of entire database. The following very simple module
   will print the database into the file when it is instructed to
   do so by FVWM command *'SendToModule MyModule dumpwinlist'*
