@@ -880,7 +880,7 @@ and one extra described below.
               with open('winlist.txt','wt') as file:
                   print(self.winlist,file=file)
           elif p.string == glob('exit *'):
-	      self.exit()
+              self.exit()
 
   m=MyModule()
   m.register_handler(fvwmpy.M_STRING,m.h_dumpwinlist)
@@ -967,7 +967,7 @@ You can keep it up to date, see examples above.
 to *Send_ConfigInfo* command. It is a list of strings, each is a
 module configuration line.
 
-  **Note** Each configuration line is concatenation of module name and
+  **Note:** Each configuration line is concatenation of module name and
   configuration parameters without any delimiter. So the line
   `*FvwmMymodule:Geometry 100x100+0-0` in FVWM's config is passed to
   the module as '*FvwmMymoduleGeometry 100x100+0-0'. I am not sure
@@ -986,11 +986,14 @@ In addition it has the following attributes
 - **`m.config.colorsets`** list of colorsets, each represented as a list of
   strings.
 
-**ToDo:** We really need to parse colorsets and create meaningful
-access to them.
-`m.config` has __str__ method that returns human readable
-representation of the database. The following module prints it to file
-when instructed by `SendToModule MyModule dumpconfig` command.
+  **ToDo:** We really need to parse colorsets and create meaningful
+  access to them.
+
+`m.config` has \_\_str\_\_ method that returns human readable
+representation of the database. The following module prints config
+database the file when instructed by `SendToModule MyModule
+dumpconfig` command.
+
 ```
 class MyModule(fvwmpy.fvwmpy):					
     def h_cmd(self,p):
@@ -1024,7 +1027,7 @@ m.run()
 ```
 
 
-#### Packet queue
+### Packet queue
 
 An instance of `fvwmpy.fvwmpy` class has attribute `m.packets` that
 represents the queue of packets from FVWM. The structure of each packet
@@ -1040,7 +1043,7 @@ put into the queue.
 
 `m.packets` has the following attributes and methods
 
-- **`m.packets.__len__`
+- **`m.packets.__len__`**
 
   You can see how many packets are waiting to be handled with
   `len(m.packets)`. 
@@ -1078,7 +1081,9 @@ put into the queue.
 - **`m.packets.pick(picker, which='first', keep=False, timeout=500)`**
 
   Return all/first/last packet(s) from the queue for which
-  `picker` evaluates to true, possibly removing them from the queue.
+  `picker` evaluates to true, possibly removing them from the queue,
+  depending on the parameter `keep`. Even if no packets are found,
+  return after `timeout` milliseconds.
   
   **Note:** the return value is always a `tuple`, even if returning
   one or zero packets.
@@ -1138,10 +1143,10 @@ for all types of packets. See [FVWM module
 Any packet has always the following attributes
 - **`p.ptype`** - Integer. Type of the packet. See `fvwmpy.M[X]_*` constants.
 - **`p.name`** - String. Type of the packet as a character string
-  matching `glob('M[X]_*|M_*'). This is a property, there is no
-  corresponding key.
+  matching `glob('MX_*|M_*')`. This is a property, there is no
+  corresponding key in the dictionary.
 - **`p.time`** - Integer. Time stamp
-- **`p.body` - Bytearray. The raw body of the packet without the header.
+- **`p.body`** - Bytearray. The raw body of the packet without the header.
 
 Other attributes/keys depend on the packet. Below they are listed for
 each type of packets.
@@ -1262,19 +1267,21 @@ each type of packets.
   first 29 attributes of an instance of `fvwmpy._window` class above
   (up to and including `w.flags`)
   
+**ToDo:** Details of the packet attributes above.
 
+### Picker factory
 
-## Picker factory
-
-The `fvwmpy` module has a special class `fvwmpy.picker` that can be
+The `fvwmpy` module defines a special class `fvwmpy.picker` that can be
 used for creating callables that take a packet as an argument and
-returns a boolean value. There are two invocation signatures
+return a boolean value. There are two invocation signatures
 
-- **`fvwmpy.picker(fcn)`**
+- **`fvwmpy.picker(fcn=None)`**
 
-  `fcn` is a callable with packet as an argument. 
+  `fcn` is a callable with packet as an argument or `None`. 
   Return a callable (picker object) equivalent to the `fcn` in the sense that
   `fvwmpy.picker(fcn)(p) == bool(fcn(p))` for any packet `p`.
+
+  If `fcn` is `None` then return a picker object, that is always True.
 
 - **`fvwmpy.picker(mask=None,**kwargs)`** 
 
@@ -1290,13 +1297,13 @@ returns a boolean value. There are two invocation signatures
   key:value pairs `key1:val1`, `key2:val2`,...
 
   If one of the keys is missing in packet `p`, then the return value
-  of pck(p) is `False`. If mask is `None`, then no mask matching is performed.
+  of `pck(p)` is `False`. If mask is `None`, then no mask matching is performed.
   
   In place of `val1`, `val2`, you can use `glob` and `Glob` objects ,
   described above to check matching of strings against glob
   patterns. See examples below.
 
-  picker objects can be conjoined with `|`, `&` or unary `~`
+  `fvwmpy.picker` objects can be conjoined with `|`, `&` or unary `~`
   operators. The resulting picker evaluated on packet `p` returns
   value which is `or`, `and` or `not` of the value(s) of operand(s)
   evaluated on `p`. These operators short-circuit from left to
@@ -1308,7 +1315,7 @@ returns a boolean value. There are two invocation signatures
   pck1 = (
            picker(win_name=glob('Fvwm*')  ) |
            picker(res_name=glob('*term*') )
-	 )
+         )
 
   pck2 = picker(mask = M_ENTER_WINDOW|M_LEAVE_WINDOW, window=1234567)
   
