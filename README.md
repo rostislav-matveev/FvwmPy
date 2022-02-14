@@ -383,8 +383,8 @@ Instances of `fvwmpy` have the following attributes and methods
   A logger object associated with the instance.  You may call
   `m.logger.setLevel(<new_level>)` to change the severity threshold
   for logging messages.  Here `<new_level>` is one of the `fvwmpy.L_*`
-  constants described above. `m.logger.level` is the current level.
-  See also `m.debug`,...,`m.critical` methods below.
+  constants described above. `m.logger.getEffectiveLevel()` is the
+  current level.  See also `m.debug`,...,`m.critical` methods below.
 
 - **`m.config`**
 
@@ -451,9 +451,10 @@ Instances of `fvwmpy` have the following attributes and methods
   *stderr*-stream will be the same as for FVWM. Logging functions
   print the severity level followed by the alias of the module
   followed by the formatted message. The behavior of these functions
-  is affected by the value of `m.logger.level`. Only messages with
-  severity not less then `m.logger.level` will be printed.
-  Use `m.logger.setLevel(value)` to change logging level.
+  is affected by the value returned by
+  `m.logger.getEffectiveLevel()`. Only messages with severity not less
+  then that level will be printed.  Use
+  `m.logger.setLevel(value)` to change logging level.
   
 - **`m.sendmessage(msg, context_window=None, finished=False)`**
 

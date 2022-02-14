@@ -38,6 +38,7 @@ class fvwmmymod(fvwmpy):
             self.info("Try to set page.nx")
             self.var.page_nx = 7
         elif cmd == "infostore":
+            self.sendmessage("Send_WindowList")
             self.info("Set infostore {}={}","var.1",17)
             self.infostore.var_1=17
             self.info("Set infostore {}={}","var.2","string value")
@@ -67,7 +68,7 @@ class fvwmmymod(fvwmpy):
         elif cmd == "removemask":
             self.mask &= ~packetcodes[args[0].upper()]
             self.command("mask")
-        elif cmd == "config" or cmd == "getconfig":
+        elif cmd == "config":
             self.getconfig(match = "")
             with open("config.txt","wt") as file:
                 print(self.config,file=file)
@@ -134,6 +135,41 @@ class fvwmmymod(fvwmpy):
                 print(dir(self),file=file)
                 print("\n\npacket reader",file=file)
                 print(dir(self.packets),file=file)
+        elif cmd == "all":
+            self.info("="*60)
+            self.info(" ")
+            self.command("var")
+            self.packets.clear()
+            
+            self.info("="*60)
+            self.info(" ")
+            self.command("infostore")
+            self.packets.clear()
+            
+            self.info("="*60)
+            self.info(" ")
+            self.command("mask")
+            self.packets.clear()
+
+            self.info("="*60)
+            self.info(" ")
+            self.command("config")
+            self.packets.clear()
+
+            self.info("="*60)
+            self.info(" ")
+            self.command("winlist")
+            self.packets.clear()
+
+            self.info("="*60)
+            self.info(" ")
+            self.command("reply")
+            self.packets.clear()
+
+            self.info("="*60)
+            self.info(" ")
+            self.command("filterwinlist")
+            self.packets.clear()           
         else:
             self.info(" unknown command {}",cmd)
                 
@@ -144,7 +180,7 @@ m=fvwmmymod()
 m.logger.setLevel(L_INFO)
 m.packets.logger.setLevel(L_INFO)
 packet.logger.setLevel(L_INFO)
-m.mask = M_STRING | MX_REPLY | M_ERROR | M_FOR_CONFIG | MX_ENTER_WINDOW
+m.mask = M_STRING | MX_REPLY | M_ERROR | M_FOR_CONFIG | MX_ENTER_WINDOW | M_FOR_WINLIST
 m.syncmask     = 0
 m.nograbmask   = 0
 m.packfile = open('packfile.txt',"wt",buffering=1<<20)

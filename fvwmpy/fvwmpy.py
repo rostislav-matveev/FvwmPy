@@ -292,7 +292,7 @@ class fvwmpy:
 
         ( self.logger, self.debug, self.info,
           self.warn,   self.error, self.critical  ) = _getloggers(self.alias)
-        self.logginglevel = L_INFO
+        self.logger.setLevel(L_WARN)
 
         self.handlers     = { pack : [] for pack in packetnames }
         ### We have to do that because mask.setter assumes 
@@ -346,7 +346,7 @@ class fvwmpy:
                                           b'NOP',
                                           FINISHED) ) )
         self._tofvwm.flush()
-        self.sendmessage_hook()
+        self.sendmessage_hook(msg, context_window, finished)
         
     def finishedstartup(self):
         self.debug("FINISHED STARTUP")
