@@ -5,7 +5,7 @@ import time as _time
 
 from   .constants     import *
 from   .packet_reader import *
-from   .packet_reader import _packet_reader
+from   .packet_reader import _packet_queue
 from   .packet        import packet
 from   .exceptions    import *
 from   .log           import _getloggers
