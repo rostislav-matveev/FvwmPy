@@ -4,3 +4,6 @@
 **/*~
 **/#*#
 .#.gitignore
+fvwmpy.egg-info/
+pyproject.toml
+setup.cfg
