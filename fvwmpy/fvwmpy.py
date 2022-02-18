@@ -4,8 +4,8 @@ import struct as _struct
 import time as _time
 
 from   .constants     import *
-from   .packet_reader import *
-from   .packet_reader import _packet_queue
+from   .packet_queue  import _packet_queue
+### this is needed to set logging level
 from   .packet        import packet
 from   .exceptions    import *
 from   .log           import _getloggers
@@ -37,7 +37,7 @@ class _unique_id:
 
 unique_id =  _unique_id()
 
-VERSION = "1.0.1"
+VERSION = "1.2.0"
 
 ################################################################################
 
@@ -338,7 +338,7 @@ class fvwmpy:
         self.config       = _config()
         self.var          = _fvwmvar(self)
         self.infostore    = _infostore(self)
-        self.packets      = _packet_reader(self)
+        self.packets      = _packet_queue(self)
         
     @property
     def alias(self):
@@ -487,7 +487,7 @@ class fvwmpy:
             raise IllegalOperation(
                 "Can not restore masks. Mask stack is empty" )
 
-    def getreply(self,msg,context_window=None):
+    def getreply(self,msg,context_window=None,timeout=0.5):
         """Send a string to FVWM in context context_window
         get the reply and return it
         """
@@ -499,31 +499,18 @@ class fvwmpy:
             self.sendmessage( "Send_Reply {}{}".format(uid,msg),
                               context_window = context_window)
             replypicker = picker(mask = MX_REPLY,string =Glob(uid+"*") )
-            passes = 10
-            delay  = 0.1
-            for i in range(passes):
-                packs = self.packets.pick(picker = replypicker,
-                                          which  = "last",
-                                          keep   = False )
-                self.info("getreply: pass {}, got {} reply packets",i,len(packs))
-                if packs:
-                    break
-                elif i < passes-1:
-                    self.info( "getreply: FVWM seems to be slow, " +
-                               "I will try again")
-                    time.sleep(delay)
+            packs = self.packets.pick(picker=picker(mask = MX_REPLY,
+                                                  string =Glob(uid+"*") ),
+                                    timeout=timeout)
         finally:
             self.restore_masks()
-        if len(packs) > 1:
-           self.warn( "getreply: get more then one reply, "+
-                      "return the last one")
-        elif not packs:
-            self.warn( "getreply: didn't get any reply, return None")
+        if not packs:
+            self.warn( "getreply: didn't get any reply from FVWM, return None")
             return
         else:
-            return packs[-1].string.replace(uid,"")
+            return packs[0].string.replace(uid,"")
 
-    def getconfig(self, handler=None, match=None):
+    def getconfig(self, handler=None, match=None, timeout=0.5):
         """Ask FVWM for module configuration information matching
         string in parameter match ('*'+m.alias if match==None).
         Pass the reply packets to handler (h_saveconfig if handler==None)
@@ -539,31 +526,17 @@ class fvwmpy:
                 self.info("getconfig: standard handler")
                 self.config    = _config()
                 self.rawconfig = list()
-
-            confpicker = picker(mask = M_FOR_CONFIG)
-            packs = list()
-            passes = 10
-            delay  = 0.1
-            for i in range(passes):
-                packs += self.packets.pick( picker = confpicker,
-                                            which  = "all",
-                                            keep   = False )
-                self.info( "getconfig: pass {}, got {} " +
-                           "config packets",i,len(packs))
-                if packs and packs[-1].ptype & M_END_CONFIG_INFO:
-                    break
-                elif i < passes-1:
-                    self.info( "getconfig: FVWM seems to be slow, " +
-                           "I will try again")
-                    time.sleep(delay)
-                else:
-                    self.warn( "getconfig: didn't get M_END_CONFIG_INFO packet")
+            packs = self.packets.pick( picker = picker(mask=M_FOR_CONFIG),
+                                       until  = picker(mask=M_END_CONFIG_INFO),
+                                       timeout = timeout )
+            self.info( "getconfig: got {} config packets",len(packs))
         finally:
             self.restore_masks()
         for p in packs:
             handler(p)
+        return packs[-1].ptype == M_END_CONFIG_INFO
             
-    def getwinlist(self, handler = None):
+    def getwinlist(self, handler = None, timeout=0.5):
         """Ask FVWM for the list of all windows.
         Pass replies to handler (h_updatewl if handler==None)
         """
@@ -574,30 +547,17 @@ class fvwmpy:
             if handler is None:
                 handler = self.h_updatewl
                 self.winlist.clear()
-
-            wlpicker = picker(mask = M_FOR_WINLIST)
-            packs = list()
-            passes = 10
-            delay  = 0.1
-            for i in range(passes):
-                packs += self.packets.pick( picker = wlpicker,
-                                            which  = "all",
-                                            keep   = False)
-                self.info( "getwinlist: pass {}, got {} winlist packets",
-                           i,len(packs))
-                if packs and any((p.ptype & M_END_WINDOWLIST for p in packs)):
-                    break
-                elif i < passes-1:
-                    self.info( "getwinlist: FVWM seems to be slow, " +
-                               "I will try again")
-                    time.sleep(0.1)
-                else:
-                    self.warn( "getwinlist: didn't get M_END_WINLIST packet")
+            packs = self.packets.pick( picker = picker(mask = M_FOR_WINLIST),
+                                       until  = picker(mask = M_END_WINDOWLIST),
+                                       timeout = timeout )
+            self.info( "getwinlist: got {} winlist packets",
+                       len(packs))
         finally:
             self.restore_masks()
         for p in packs:
             handler(p)
-
+        return packs[-1].ptype == M_END_WINDOWLIST
+    
     def register_handler(self,mask,handler):
         """Add handler to the end of execution queues for all packets 
         matching mask.

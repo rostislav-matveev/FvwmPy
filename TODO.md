@@ -9,3 +9,8 @@
 
 [ ] redesign  _packet_queue.pick. Add wait_for parameter.
 
+[ ] redesign fvwmpy.get* methods employing pakets.wait_for method.
+
+[ ] redesign fvwmpy.{var,infostore} employing pakets.wait_for method.
+
+[ ] reflect changes in README.md

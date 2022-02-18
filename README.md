@@ -2,9 +2,9 @@
 
 This module defines class `fvwmpy`, that can be used by itself or as a
 base for derived classes for writing FVWM modules.  
-
+#### Version fvwmpy_v1.2.0
 ## License
-This module is released under GPLv3 license.
+This module is released under GPL-3.0 license.
 
 ## Declaration
 I love FVWM
@@ -121,25 +121,25 @@ The following constants are defined within the module
   interface](https://www.fvwm.org/Archive/ModuleInterface/) for the complete 
   list and definitions. 
 
-- **`fvwmpy.contextnames`**
+- **`fvwmpy.contextnames`**, **`fvwmpy.contextcodes`**
 
-  A dictionary with keys being contexts, and values -- character strings
-  containing the names of the corresponding context.
+  `fvwmpy.contextnames` is a dictionary with keys being contexts, and
+  values -- character strings containing the names of the
+  corresponding context.
 
-- **`fvwmpy.contextcodes`**
-
-  The inverse of the `fvwmpy.contextnames` dictionary.
+  `fvwmpy.contextcodes` is the inverse of the `fvwmpy.contextnames`
+  dictionary.
 
 - **`fvwmpy.M[X]_*`**
 
   Integers.
   
   Types of packets send from FVWM to the module. See section
-  **packets**
+  **packets** and 
   [FVWM module
   interface](https://www.fvwm.org/Archive/ModuleInterface/) for the
   full list and meaning of packet types and other details.  In
-  addition there are the following masks:
+  addition the following masks are defined:
 
   - `fvwmpy.M_ALL` - matches all packet types;
   - `fvwmpy.M_FOR_WINLIST`
@@ -149,16 +149,14 @@ The following constants are defined within the module
   - `fvwmpy.M_FOR_CONFIG` -- mask matching all packets emitted by FVWM
     in response to *'Send_ConfigInfo'* command and `fvwmpy.M_SENDCONFIG`
 
-- **`fvwmpy.packetnames`**
+- **`fvwmpy.packetnames`**, **`fvwmpy.packetcodes`**
 
-  Dictionary for converting packet types to their names.
+  `fvwmpy.packetnames` is a ictionary for converting packet types to their names.
   E.g.
 
   `fvwmpy.packetnames[fvwmpy.MX_LEAVE_WINDOW] == 'MX_LEAVE_WINDOW'`
 
-- **`fvwmpy.packetcodes`**
-
-  The inverse dictionary of `fvwmpy.packetnames`
+  `fvwmpy.packetcodes` is the inverse dictionary of `fvwmpy.packetnames`
 
 - **`fvwmpy.FVWM_PACK_START`** and **`fvwmpy.FVWM_PACK_START_b`**
 
@@ -223,7 +221,7 @@ The following constants are defined within the module
   This exception is raised if pipe desyncronization is detected,
   e.g. when the packet from FVWM does not have begin-tag or when the
   content of the packet does not match its format.
-  Instances of `fvwmpy._packet_reader` class have method `.resync()` to seek the
+  Instances of `fvwmpy._packet_queue` class have method `._resync()` to seek the
   stream to the next pack. See **packet queue** section for more details.
 
   
@@ -248,7 +246,7 @@ The following constants are defined within the module
   Returns a callable object, that can be called on a packet and
   returns boolean value. See **Picker factory** section for more details.
 
-- **`fvwmpy.glob(globstring)`**, **`fvwmpy.Glob(string)`**
+- **`fvwmpy.glob(globstring)`**, **`fvwmpy.Glob(globstring)`**
   
   Both create glob patterns, against which you can match other
   strings.
@@ -260,7 +258,7 @@ The following constants are defined within the module
   is one of 'chars'.  To match '\*' or '?' literally, use the
   corresponding character enclosed in '[]'.
 
-  When glob instance is compared to another string with `==` or `!=`
+  When [gG]lob instance is compared to another string with `==` or `!=`
   operator, it checks whether another string matches the pattern.
 
   E.g. `'abc*efg?xyz' == glob('*c[*]EFg[?]x??')` returns `True`.
@@ -294,6 +292,11 @@ Instances of `fvwmpy` have the following attributes and methods
   single '-', then it is also removed from `m.args` and `m.alias` will
   be the same as `m.me`.  `m.alias` can not be changed afterwards.
 
+  This alias guessing seems to be consistent with what FVWM does.
+  So module with alias 'FvwmAkaModule' will receive strings sent by
+  `SendToModule FvwmAkaModule <string>` and can be terminated by
+  `KillModule FvwmAkaModule` command.
+
 - **`m.args`**
 
   List of strings. Contains command line arguments of the module. 
@@ -303,7 +306,7 @@ Instances of `fvwmpy` have the following attributes and methods
   argument is not included in `m.args`. If the first argument is a
   single '-', then it is also removed from `m.args`.
   
-  -  If the module is invoked FVWM command
+  -  If the module FvwmMyModule is invoked by FVWM command
      ```
      Module FvwmMyModule FvwmAkaModule arg1 arg2 ...
      ```
@@ -347,7 +350,8 @@ Instances of `fvwmpy` have the following attributes and methods
   other parts of the program, e.g. gui.
 
   
-  See `fvwmpy.M[X]_*` for possible values and interpretation thereof.
+  See `fvwmpy.M[X]_*` for possible values of masks and interpretation
+  thereof.
 
   See also `m.push_masks(...)` and `m.restore_masks()` methods for
   temporarily changing masks.
@@ -385,7 +389,8 @@ Instances of `fvwmpy` have the following attributes and methods
   for logging messages.  Here `<new_level>` is one of the `fvwmpy.L_*`
   constants described above. `m.logger.getEffectiveLevel()` is the
   current level.  See also `m.debug`,...,`m.critical` methods below.
-
+  The default level is `fvwmpy.L_WARN`, which keeps it relatively quiet.
+  
 - **`m.config`**
 
   `m.config` is the database containing information sent by FVWM
@@ -425,7 +430,7 @@ Instances of `fvwmpy` have the following attributes and methods
   These are special objects providing access to FVWM variables and
   infostore database.
   
-  See **FVWM variables and infostore** below
+  See section **FVWM variables and infostore** below.
 
 - **`m.packets`**
 
@@ -462,19 +467,13 @@ Instances of `fvwmpy` have the following attributes and methods
   context of `context_window`.
 
   `msg` is a multi-line string conatining FVWM commands. Empty lines
-  (only with white spaces) are ignored. For example
-  the following works
-  ```
-  cmds="""
-       Focus
-       WarpToWindow {} {}
-       """
-  m.sendmessage(cmd.format(30,50), context_window = wid )
-  ```
-  If `context_window` is not given or `None`, then the window context
-  will be equal to the context at which module was called (that is
+  (only with white spaces) are ignored. For example the following
+  works ``` cmds=""" Focus WarpToWindow {} {} """
+  m.sendmessage(cmds.format(30,50), context_window = wid ) ``` If
+  `context_window` is not given or `None`, then the window context
+  will be equal to the context window of the module (that is
   `m.context_window`). If `context_window==0`, then FVWM executes
-  commands without window context.  
+  commands without window context.
 
   If `finished` then FVWM will be notified that the module is done
   working and is about to exit soon.
@@ -484,21 +483,28 @@ Instances of `fvwmpy` have the following attributes and methods
   `m.sendmessage_hook()` does nothing, but can be overloaded, for
   example to let GUI part know that a message was sent.
 
-- **`m.getreply(msg,context_window=None)`**
+- **`m.getreply(msg,context_window=None,timeout=0.5)`**
 
   Send string message 'msg' to FVWM and request to send it back in the
-  context `context_window`.
-  
+  context `context_window`.  If timeout is given and not `None`, then
+  return not later then after timeout seconds. If for some reason no
+  reply was received from FVWM, `None` is returned.
+
   There is no need to change masks before/after invoking this method,
-  it works independently of the current values of masks.
+  it works independently of the current values of masks and does not
+  change them.
 
   This method works reliably independently whether there are unhandled
   packets in the packet queue. The reply will be picked and removed
-  from the queue and returned.
+  from the queue and returned. The following code works correctly.
+  
   ```
   ### Pollute the queue
+  m.push_masks(M_FOR_WINLIST|MX_REPLY,0,0)
   m.sendmessage('Send_WindowList')
-  ### Now queue is full of packets
+  m.sendmessage('Send_Reply unrelated reply')
+  m.restore_masks()
+  ### Now packet queue is full of packets
   
   w_name = m.getreply('$[w.name]',context_window=123456789)
   ### reply packet is found in the queue and is removed from it
@@ -507,17 +513,20 @@ Instances of `fvwmpy` have the following attributes and methods
   # handle packets remaining in the queue
   ```
 
-
-- **`m.getconfig(handler=None, match=None)`**
+- **`m.getconfig(handler=None, match=None,timeout=0.5)`**
 
   Ask FVWM for configuration info. Each received packet is passed to
-  the `handler`.
-
+  the `handler`. This method return `True` upon successful operation
+  or `False` is something went wrong, pehaps `M_END_CONFIG_INFO`
+  packet was not received for timeout seconds.
+  (Experimentation shows that FVWM needs not more the 0.05 seconds to
+  send config under normal circumstances)
+  
   `handler` must be `None` or a callable taking one argument, which is a
   packet of type matching `fvwmpy.M_FOR_CONFIG`. If `handler` is not
-  supplied then default handler `m.h_saveconfig` is
+  supplied or None, then the default handler `m.h_saveconfig` is
   used. `m.h_saveconfig` just fills `m.config` database with the
-  information received from FVWM.
+  information received from FVWM. See section **Config database** below. 
 
   `match` must be `None` or a string to match module configuration
   lines against.  If not supplied then `'*' + m.alias` is assumed.  If
@@ -525,7 +534,8 @@ Instances of `fvwmpy` have the following attributes and methods
   processed.
 
   There is no need to change masks before/after invoking this method,
-  it works independently of the current values of masks.
+  it works independently of the current values of masks and does not
+  change them.
 
   This method works reliably independently of the state of the packet
   queue. Even if queue is not empty at the start of this call,
@@ -533,7 +543,10 @@ Instances of `fvwmpy` have the following attributes and methods
   it. So the following works reliably
   ```
   ### Pollute the queue
+  m.push_masks(M_FOR_WINLIST|MX_REPLY,0,0)
   m.sendmessage('Send_WindowList')
+  m.restore_masks()
+
   ### Now queue is full of packets
   m.getconfig()
   ### m.config is updated and config messages are removed from the
@@ -553,18 +566,20 @@ Instances of `fvwmpy` have the following attributes and methods
   See **Config database** for more information and how to have config
   database up to date all the time.
 
-- **`m.getwinlist(handler = None)`**
+- **`m.getwinlist(handler = None,timeout=0.5)`**
 
   Ask FVWM for the list of all windows it manages. Each packet
-  received in response is passed to the handler.
+  received in response is passed to the handler. Return `True` if
+  operation was successful. Wait for at most timeout seconds for
+  `M_END_WINLIST` packet from FVWM before returning.
 
   `handler` should be a callable taking one argument, which is a
   packet of type matching `fvwmpy.M_FOR_WINLIST`. If `handler` is not
   supplied then default handler `m.h_updatewl` is used. `m.h_updatewl`
   simply updates `m.winlist` database with the information received
   from FVWM. It also understands `fvwmpy.M_ADD_WINDOW` and
-  `fvwmpy.M_DESTROY_WINDOW` packets removing corresponding entries
-  from the database.
+  `fvwmpy.M_DESTROY_WINDOW` packets removing/adding the corresponding
+  entries from the database.
 
   It is not necessary to adjust the values of the masks before or
   after invoking `fvwmpy.getwinlist()`. It works independently of the
@@ -575,7 +590,7 @@ Instances of `fvwmpy` have the following attributes and methods
   `fvwmpy.M_FOR_WINDOWLIST`-type packets will be found in the queue and removed from
   it. So the following works reliably
   ```
-    ### Pollute the queue
+  ### Pollute the queue
   m.sendmessage('Send_ConfigInfo')
   ### Now queue is full of packets
 
@@ -646,7 +661,7 @@ Instances of `fvwmpy` have the following attributes and methods
 
   `handler` should be a callable taking one argument, which is a
   packet of type matching `mask` and should be capable of processing
-  such a packet.
+  such a packet. Handlers should not raise any non-terminal exceptions.
 
   If `handler` is already registered previously for some packet types,
   it will not be registered again, neither it will be moved to the end
@@ -696,16 +711,17 @@ Instances of `fvwmpy` have the following attributes and methods
   Packets type: `M_FOR_CONFIG`
   
   This handler is capable of processing packets matching
-  `fvwmpy.M_FOR_CONFIG`. It simply records the information in
-  `m.config` database. You can insert the following lines in your code
-  to keep the database up to date
+  `fvwmpy.M_FOR_CONFIG|fvwmpy.M_SENDCONFIG`. It simply records the
+  information in `m.config` database. You can insert the following
+  lines in your code to keep the database up to date
+  
   ```
   m.getconfig()
   m.register_handler(fvwmpy.M_FOR_CONFIG, m.h_saveconfig)
   m.mask |= fvwmpy.M_SENDCONFIG | fvwmpy.M_CONFIG_INFO
   ### If you want to process config in a synchronous manner
   m.register_handler(fvwmpy.M_FOR_CONFIG, m.h_unlock)
-  m.syncmask |= fvwmpy.M_SENDCONFIG|fvwmpy.M_FOR_CONFIG
+  m.syncmask |= fvwmpy.M_SENDCONFIG | fvwmpy.M_FOR_CONFIG
   ```
   `m.h_saveconfig(pack)` does not send *NOP UNLOCK* command to FVWM.
   In case you want to process configuration information synchronously
@@ -758,7 +774,7 @@ Instances of `fvwmpy.fvwmpy` have two special objects `m.var` and
 infostore database in a transparent manner.
 
   The value of a variable (even non-existent) is always a string.
-  If variable `no_such_var` does not exist in FVWM environment,
+  If variable `no.such.var` does not exist in FVWM environment,
   the access methods below will return the literal string
   `'$[no.such.var]'`. It is client's business to check for this and to
   perform type casting, when necessary.
@@ -793,7 +809,7 @@ infostore database in a transparent manner.
   underscore. To the best of my knowledge there are no such variables,
   at least none are mentioned in the FVWM man pages.
 
-- **`m.var`**
+- **`m.infostore`**
 
   Similarly, one can access FVWM infostore database in two ways
 
@@ -817,8 +833,8 @@ infostore database in a transparent manner.
   delete an infostore variable, whose name contains underscore.
 
 Access methods for both FVWM variables and infostore variables work
-reliably independently of the state of the packet queue. So you may
-have some stale packets in the queue and still get the values.
+reliably independently of the state of the packet queue. So you can
+have some stale packets in the queue and still get the correct values.
   
 Note that each access attempt results in communication with FVWM, so it
 is better access once and store values, if needed.
@@ -904,10 +920,10 @@ and one extra described below.
   source tree.
 
   Each value of `m.winlist` is `fvwmpy._window` object.
-  `fvwmpy._window` inherits from `dict`. Values of the dictionary can
-  also be accessed as attributes via `w.key`, which is completely
-  equivalent to `w['key']`. Also both raise `KeyError()` exception,
-  if the key/attribute is missing.
+  `fvwmpy._window` inherits from `dict`. For syntactic convenience
+  values of the dictionary can also be accessed as attributes via
+  `w.key`, which is completely equivalent to `w['key']`. Also both
+  raise `KeyError()` exception, if the key/attribute is missing.
 
   The attributes/keys are
 
@@ -963,7 +979,7 @@ and one extra described below.
 The winlist database is filled by `m.getwinlist()` method.
 You can keep it up to date, see examples above.
 
-#### Config database
+#### Config database **`m.config`**
 `m.config` is a database of configuration information sent in response
 to *Send_ConfigInfo* command. It is a list of strings, each is a
 module configuration line.
@@ -1039,8 +1055,8 @@ One can change the level of logging produced by `m.packets` by calling
 one of `fvwmpy.L_*` constants described above. The default level is
 `fvwmpy.L_WARN`, which makes it mostly quiet.
 
-The packets are read from the FVWM-to-module pipe synchronously and
-put into the queue.
+The packets are read from the FVWM-to-module pipe asynchronously and
+put into the queue for processing by the module.
 
 `m.packets` has the following attributes and methods
 
@@ -1049,86 +1065,80 @@ put into the queue.
   You can see how many packets are waiting to be handled with
   `len(m.packets)`. 
 
-- **`m.packets._queue_nonempty`**
-
-  This is `threading.Event()` object which is set when the queue has
-  packets in it. You can `m.packets._queue_nonempty.wait()` to block
-  until a packet has arrived. It is unsafe and not advised to do so,
-  but better use `m.packets.read()` method, because it takes care of
-  clearing and setting the event when necessary.
-
 - **`m.packets.clear()`**
 
   Empty the queue discarding all of its content.
 
-- **`m.packets.read(blocking = True)`**
+- **`m.packets.read(keep=False,timeout=None)`**
 
   Returns and removes the packet from the top of the queue. If queue
-  is empty and `blocking` is `True` it waits for the packet to arrive.
-  If queue is empty and `blocking` is `False`, return immediately with
-  return value `None`.
+  is empty and `timeout` is `None` it waits for the packet to arrive.
+  If queue is empty and `timeout` is given and not `None`,
+  return value `None`, if no packet arrived in the pipe during timeout
+  seconds. 
 
-  **ToDo:** Implement `timeout` parameter, so that when packet
-  arrives return it immediately. If no packet has arrived in the empty
-  queue within `timeout` milliseconds, return `None`.
-  
-- **`m.packets.peek(blocking = True)`**
+- **`m.packets.peek(timeout=None)`**
 
   This is like `m.packets.read` method, except the packet remains in
   the queue and will be returned with the next `m.packets.read` or
   `m.packets.peek` call, unless it will have been  `m.packets.pick`ed
   meanwhile.
   
-- **`m.packets.pick(picker, which='first', keep=False, timeout=500)`**
+- **`m.packets.pick(picker, until=None, keep=False, timeout=0.500)`**
 
-  Return all/first/last packet(s) from the queue for which
+  Return all packets from the queue for which
   `picker` evaluates to true, possibly removing them from the queue,
-  depending on the parameter `keep`. Even if no packets are found,
-  return after `timeout` milliseconds.
+  depending on the parameter `keep`. The queue is searched until
+  packet for which `until` evaluates to true is found.
+  Even if no packets are found, return after `timeout` seconds.
   
   **Note:** the return value is always a `tuple`, even if returning
   one or zero packets.
 
-  **Note:**
-  ```
-  m.packets.pick( picker = lambda p: True,
-                  which='last',
-                  timeout=500   )
-  ```
-  can be used as `timeout`ed read.
-  
-  - `picker` is a callable, which takes single packet as an argument
-    and returns a boolean value. Only packets for which `picker` is true
-    are returned. See **Picker factory** section for a simple and
-    flexible way to create such callables.
+  - `picker` must be a callable, taking a packet as a single parameter
+    and returning boolean value. It is used to prune the queue.  See
+    **Picker factory** for creating pickers.
 
-  - `which` must be one of 'first', 'last', 'all'.
-    If the value is 'first' `m.packets.pick` returns the oldest
-    packet satisfying conditions. If the value is 'last' the packet
-    returned will be the most recent and for 'all' all matching
-    packets will be returned.
+  - `until` is the same type as `picker`. The search in the queue will
+    be termineated once the packet for which `until` evaluated to
+    `True` is encountered. If not given or `None` then `until` is set
+    to be equal to `picker`. In that case the first (oldest) packet
+    matching `picker` will be found and returned (if it arrives within
+    timeout seconds).
 
   - `keep` is a boolean that indicates whether packets should be
     removed from the queue.
 
-  - `timeout` is an integer that indicates how many milliseconds shall
-    we wait until at least something is found. When no matching
-    packets are found then `m.packets.pick` checks the queue at some
-    regular intervals until `timeout` is exhausted.
-    
-    Note that if `which` is 'all' or 'last' and some packets are found
-    at some point, then `m.packets.pick` returns whatever is found
-    immediately, not waiting for the full `timeout`.
+  - `timeout`  indicates how many seconds shall
+    the method wait for `until(p)==True`-packet. If `timeout` is `None`,
+    wait indefinitely.
+      
+  Examples:
 
-- **`m.packets.resync()`**
+  ```
+  ### Find all config lines about colorsets
+  packs = m.packets.pick( picker = picker( mask = M_FOR_CONFIG, string =
+                                           glob("colorset*") ),
+                          until  = picker( mask = M_END_CONFIG_INFO ) )
 
-  It may happen that the pipe gets desyncronized and confusion arises
-  as to where the boundaries of packets are. `m.packets.resync()`
-  seeks to the beginning of the next packet in the pipe. These
-  situations are dealt internally in `m.packets`, so it is unlikely
-  that one has to deal with this on the user side.
-  (Pipe desyncronization never happened so far during testing)
+  ### Find the oldest MX_ENTER_WINDOW PACKET
+  (pack,) = m.packets.pick( picker = picker( mask = M_ENTER_WINDOW ))
 
+  ### Find all `SendToModule`-messages from FVWM until this moment
+  tag = fvwmpy.unique_id()
+  m.sendmessage("SendReply {}".format(tag))
+  packs = m.packets.pick (picker = picker(mask=M_STRING),
+                          until  = picker(mask=MX_REPLY,
+                                          string=glob(tag)))
+
+  ### In the last example MX_REPLY packet will not be returned and
+  ### will remain in the queue. If this is undesired change the last
+  ### line to
+  end = picker(mask=MX_REPLY,string=glob(tag))
+  pick = picker = picker(mask=M_STRING) | end
+  packs = m.packets.pick (picker=pick, until=end)
+  ```
+  
 ##### FVWM packets
 
 `m.packets.{read,peek,pick}()` return an instance of `fvwmpy._packet`

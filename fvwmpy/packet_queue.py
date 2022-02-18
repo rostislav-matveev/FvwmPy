@@ -3,10 +3,10 @@ import sys
 import threading
 import time
 
-# from   .constants  import *
-# from   .exceptions import *
-# from   .log        import  _getloggers
-# from   .packet     import packet
+from   .constants  import *
+from   .exceptions import *
+from   .log        import  _getloggers
+from   .packet     import packet
 
 ################################################################################
 ### some helpers
@@ -27,19 +27,18 @@ class _packet_queue:
         self.logger.setLevel(L_WARN)
         self._pipe            = module._fromfvwm
         self._queue           = list()
-        self._notempty        = threading.Event()
-        self._lock      = threading.Lock()
+        self._nonempty        = threading.Event()
+        self._lock            = threading.Lock()
+        self._spack_found     = threading.Event()
+        self._spack_picker    = None
+        self._spack           = None
         self._thread_exception = None
+        self._packet_picker   = None
         self._reader_thread   = threading.Thread( target = self._reader,
                                                   name   = "reader_thread",
                                                   daemon = True            )
         self.debug(" Start reader_thread as daemon")
         self._reader_thread.start()
-
-    @property
-    def locked(self):
-        "True if queue is locked, otherwise False"
-        return self._lock.isSet()
 
     def __bool__(self):
         return bool(self._queue)
@@ -47,7 +46,7 @@ class _packet_queue:
     def __len__(self):
         return len(self._queue)
 
-    ### This is the one to be threaded
+    ### This is the one to be threaded (daemon)
     def _reader(self):
         while True:
             try:
@@ -59,10 +58,17 @@ class _packet_queue:
                 
                 self._lock.acquire()
                 self._queue.append(p)
+                ### Are we waiting for some special packet?
+                if self._spack_picker and self._spack_picker(p):
+                    ### Were waiting and packer arrived
+                    self.debug("threaded_reader: found special pack {}",p.name)
+                    self._spack = (len(self._queue)-1, p)
+                    self._spack_picker = None
+                    self._spack_found.set()
                 self._nonempty.set()
             except PipeDesync as e:
                 self.error( "threaded_reader: {}",repr(e))
-                self.error( "threaded_reader: Resync the pipe."+
+                self.error( "threaded_reader: Resync the pipe. "+
                             "Packet(s) may be lost.")
                 self._resync()
             except BaseException as e:
@@ -72,8 +78,9 @@ class _packet_queue:
                 self.error("threaded_reader: {}",repr(e))
                 self.error("threaded_reader: pass to the main thread")
                 self._thread_exception = e
-                ### release self._nonempty.wait() in the main thread
-                ### main mast now check for non empty queue
+                ### set events so there is no waiting in the main thread
+                ### main must now check and clear events
+                self._packet_picked.set()
                 self._nonempty.set()
             finally:
                 if self._lock.locked(): self._lock.release()
@@ -83,46 +90,93 @@ class _packet_queue:
     def read(self,keep=False,timeout=None):
         """Read the packet from the top of the queue.
 
-        In timeout is not None wait for at most timeout millisecond.
-        If no packet arrived meanwhile in the queue, return None.
+        If timeout is not None, wait for at most timeout second.
+        If meanwhile no packet arrived in the queue, return None.
 
         If keep is False, remove the packet from the queue, otherwise keep 
         it there.
         """
         ### Let's see if something bad happened in the thread.
         self._check_exception()
-        self.debug( "main: queue size={}; queue_nonempty={}",
+        self.debug( "read: queue size={}; queue_nonempty={}",
                     len(self._queue),
                     bool(self) )
-        if timeout is not None: timeout /= 1000
         gotpack = self._nonempty.wait(timeout)
         ### Let's see if the thread got an exception while we were waiting
         self._check_exception()
         if gotpack:
             p = self._queue[0]
-            self.debug("read: got {} at {} from {} packets", p.name,p.time,len(self))
+            self.debug( "read: got {} at {} from {} packets",
+                          p.name,p.time,len(self))
             if not keep:
                 self._lock.acquire()
                 del self._queue[0]
+                if not self._queue: self._nonempty.clear()
                 self._lock.release()
             return p
         else: 
             self.debug("read: queue is empty, returning None after timeout")
             return None
 
-    def peek(self,timeout=None):
-        """Read the packet from the top of the queue, but leave
-        in the queue.
+    def pick(self,picker,until=None,timeout=0.5,keep=False):
+        """Find and return all packets in the queue for which picker 
+        evaluates to True and which arrived before the first packet for which
+        until picker evaluates to true.
+        Return with whatever found after timeout seconds, if the 'wait_for' packet 
+        did not arrive. 
+        Keep packets in the queue if keep is True, otherwise remove them.
+        That does not includes the packet that marks the end of the search,
+        unless it is also picked.
         """
-        return( self.read(keep=True,timeout=timeout) )
+        self._check_exception()
+        if until is None:
+            until = picker
+        packs = list()
+        indices = list()
+        try:
+            self._lock.acquire()
+            if not any( map(until,self._queue) ):
+                self.debug("pick: Didn'r reach until. Wait for the threaded reader")
+                self._spack_picker = until
+                self._spack_found.clear()
+                self._lock.release()
+                self._spack_found.wait(timeout)
+                self._check_exception()
+                self._lock.acquire()
+            for i, p in enumerate(self._queue):
+                if picker(p):
+                    self.debug("pick: {}. picked a pack {}",i,p.name)
+                    indices.append(i)
+                    packs.append(p)
+                if until(p):
+                    self.debug("pick: reached until")
+                    break
+            self.debug("pick: found {} out of {} packs",
+                       len(indices),len(self)    )
+            if not keep:
+                self.debug("pick: deleting found")
+                for i in reversed(indices):
+                    del self._queue[i]
+            if not self._queue: self._nonempty.clear()
+            return packs
+        finally:
+            self._spack_picker = None
+            if self._lock.locked(): self._lock.release()
+            
+    def clear(self):
+        "Clear the queue."
+        self._lock.acquire()
+        self._queue.clear()
+        self._lock.release()
 
     def _check_exception(self):
         if self._thread_exception:
             e = self._thread_exception
             self._thread_exception = None
-            self.debug("_check_exception: {} detected in the thread",e)
-            ### thread sets nonempty lock for the main thread to proceed
-            ### we have to clear it, if necessary
+            self.debug("check_exception: {} detected in the thread",repr(e))
+            ### thread sets events for the main thread to proceed
+            ### we have to clear, if necessary
+            self._packet_picked.clear()
             if not self._queue:
                 self._nonempty.clear()
             raise e
@@ -140,74 +194,4 @@ class _packet_queue:
             else:
                 self._pipe.read(position)
                 found = True
-
-            
-    def clear(self):
-        "Clear the queue."
-        self._lock.acquire()
-        self._queue.clear()
-        self._lock.release()
-        
-    def pick( self, picker, which="first", keep=False, timeout=500 ):
-        """Find all/first/last packet in the queue for which picker 
-        evaluates to True
-        """
-        start = 0
-        ipacks = list()
-        ### walk through the queue, if  nothing found
-        ### then wait and check the rest of the queue repeatedly
-        t = 0
-        tstep = 10
-        while t <= timeout:
-            ### ToDo: don't check all, if which in {"first","last"}!!!
-            self._queue_lock.acquire()
-            iq = enumerate(self._queue[start:],start)
-            ipacks += list(filter( lambda ip: picker(ip[1]), iq))
-            ### for debug DONT FORGET!!!
-            # for i, p in iq:
-                # if picker(p): ipacks.append((i,p))
-            ### for the next go
-            start = len(self._queue)
-            self._queue_lock.release()
-            if ipacks:
-                ### found something
-                break
-            else:
-                ### let's have another chance
-                ### and give time for the threaded reader to fill the queue
-                t += tstep
-                time.sleep(tstep/1000)
-        if not ipacks:
-            ### There is nothing
-            return tuple()
-        if which == "first":
-            i, p = ipacks[0]
-            # self.debug("pick: got {} {}",p.name,p.string)
-            if not keep:
-                self._queue_lock.acquire()
-                del self._queue[i]
-                if not self._queue: self._queue_nonempty.clear()
-                self._queue_lock.release()
-            return (p,)
-        elif which == "last":
-            i, p = ipacks[-1]
-            if not keep:
-                self._queue_lock.acquire()
-                del self._queue[i]
-                if not self._queue: self._queue_nonempty.clear()
-                self._queue_lock.release()
-            return (p,)
-        elif which == "all":
-            packs = tuple( (p for i,p in ipacks) )
-            inds  = tuple( (i for i,p in ipacks) )
-            if not keep:
-                self._queue_lock.acquire()
-                for i in reversed(inds):
-                    del self._queue[i]
-                if not self._queue: self._queue_nonempty.clear()
-                self._queue_lock.release()
-            return packs
-        else:
-            raise ValueError(
-                "parameter `which` must be one of 'first', 'last' or 'all'" )
 

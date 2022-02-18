@@ -1,7 +1,9 @@
 #!/usr/bin/python3
+import sys
+import time
+import threading
 
 from fvwmpy import *
-import sys
 
 class fvwmmymod(fvwmpy):
     def h_dumppack(self,p):
@@ -14,61 +16,65 @@ class fvwmmymod(fvwmpy):
         del args[0]
         if cmd == "var":
             ### pollute the Q
+            self.push_masks(M_FOR_CONFIG,0,0)
             self.sendmessage("Send_ConfigInfo")
-            self.info("Get variable {}={}","pointer.x",self.var.pointer_x)
-            self.info("Get variables {}={}","(pointer.x,pointer.x)",
-                      self.var("pointer_x","pointer_y") )
-            self.info("In window context:")
+            self.restore_masks()
+            self.info("var: Get {}={}","pointer.x",self.var.pointer_x)
+            self.info("var: Get {}={}","(pointer.x,pointer.y)",
+                      self.var("pointer.x","pointer_y") )
+            self.info("var: In window context:")
             self.sendmessage(
                 "All (Focused) SendToModule {} XXXX$[w.id] $[w.name]".
                 format(self.alias) )
             winpicker = picker(mask=M_STRING,string=glob("XXXX*"))
-            (pack,) = self.packets.pick( picker=winpicker,
-                                         which="last")
+            (pack,) = self.packets.pick( picker=winpicker)
             wid, wname = pack.string.replace("XXXX","").split()
             cw = int(wid,16)
-            self.info("In window {} {}",wname,wid)
-            self.info( "Get variables {}={}","(w.id,pointer.wx,pointer.wy)",
-                           self.var( "w.id","pointer_wx","pointer.wy",
-                                      context_window = cw ) )
-        elif cmd == "delvar":
-            self.info("Try to delete page.nx")
-            del self.var.page_nx
-        elif cmd == "setvar":
-            self.info("Try to set page.nx")
-            self.var.page_nx = 7
-        elif cmd == "infostore":
+            self.info("var: In window {} {}",wname,wid)
+            self.info( "var: Get variables {}={}","(w.id,pointer.wx,pointer.wy)",
+                       self.var( "w.id","pointer_wx","pointer.wy",
+                                 context_window = cw ) )
+            try:
+                self.info("var: Try to delete page.nx")
+                del self.var.page_nx
+            except IllegalOperation as e:
+                self.info("var: {}",repr(e))
+            try:
+                self.info("var: Try to set page.nx")
+                self.var.page_nx = 7
+            except IllegalOperation as e:
+                self.info("var: {}",repr(e))
+            ########################################
+            self.push_masks(M_FOR_WINLIST,0,0)
             self.sendmessage("Send_WindowList")
-            self.info("Set infostore {}={}","var.1",17)
+            self.restore_masks()
+            self.info("infostore: Set {}={}","var.1",17)
             self.infostore.var_1=17
-            self.info("Set infostore {}={}","var.2","string value")
+            self.info("infostore: Set {}={}","var.2","string value")
             self.infostore.var_2="string value"
-            self.info("Get infostore {}={}","var.2",self.infostore.var_2)
-            self.info("Get infostores {}={}","(var.1,var.2)",
+            self.info("infostore: Get {}={}","var.2",self.infostore.var_2)
+            self.info("infostore: Get {}={}","(var.1,var.2)",
                       self.infostore("var.1","var_2") )
-            self.info("Get infostores {}={}","(var.1,var.2,unknown)",
+            self.info("infostore: Get {}={}","(var.1,var.2,unknown)",
                       self.infostore("var.1","var_2","unknown") )
-            self.info("Get infostore {}={}","unknown",
+            self.info("infostore: Get {}={}","unknown",
                       self.infostore.unknown )
-            self.info("Del infostore {}","unknown")
+            self.info("infostore: Del {}","unknown")
             del self.infostore.unknown
-            self.info("Del infostore {}","var.1")
+            self.info("infostore: Del {}","var.1")
             del self.infostore.var_1
-            self.info("Del infostore {}","var.2")
+            self.info("infostore: Del {}","var.2")
             del self.infostore.var_2
-            self.info("Get infostores {}={}","(var.1,var.2,unknown)",
+            self.info("infostore: Get {}={}","(var.1,var.2,unknown)",
                       self.infostore("var.1","var_2","unknown") )
-        elif cmd == "addmask":
-            self.mask |= packetcodes[args[0].upper()]
-            self.command("mask")
         elif cmd == "mask":
             self.info(" MASK")
             for m in split_mask(self.mask):
                 self.info("\t{}",packetnames[m])
-        elif cmd == "removemask":
-            self.mask &= ~packetcodes[args[0].upper()]
-            self.command("mask")
         elif cmd == "config":
+            self.push_masks(M_FOR_WINLIST,0,0)
+            self.sendmessage("Send_WindowList")
+            self.restore_masks()
             self.getconfig(match = "")
             with open("config.txt","wt") as file:
                 print(self.config,file=file)
@@ -77,36 +83,131 @@ class fvwmmymod(fvwmpy):
                     for cl in self.rawconfig:
                         print(cl,file=file)
             except AttributeError: pass
+        elif cmd == "winlist":
+            self.push_masks(M_FOR_CONFIG,0,0)
+            self.sendmessage("Send_ConfigInfo")
+            self.restore_masks()
+           
+            self.getwinlist()
+            with open("winlist.txt","wt") as file:
+                print(self.winlist,file=file)
         elif cmd == "pick":
-            mp = picker(mask=M_FOR_CONFIG,string=glob("color*"))
             self.push_masks(M_ALL,0,0)
+            self.info("pick: from polluted queue")
             ### lets pollute the queue
             self.sendmessage("Send_WindowList")
             self.sendmessage("Send_ConfigInfo")
             self.sendmessage("Send_WindowList")
             time.sleep(3)
-            self.info(" Pick: q size {}",len(self.packets))
-            self.info(" Pick first")
-            (p, ) = self.packets.pick(mp,which="first")
-            self.info(" Got")
-            print(p,file=sys.stderr)
-            self.info(" Pick: q size {}",len(self.packets))
-            self.info(" Pick last")
-            (p, ) = self.packets.pick(mp,which="last")
-            self.info(" Got")
-            print(p,file=sys.stderr)
-            self.info(" Pick: q size {}",len(self.packets))
-            self.info(" Pick all")
-            packs = self.packets.pick(mp,which="all")
-            self.info(" Got {}",len(packs))
-            self.info(" Pick: q size {}",len(self.packets))
+            ######################################
+            self.info("pick: 1. from {} packets",len(self.packets))
+            packs = self.packets.pick(picker(mask=M_FOR_CONFIG,
+                                             string=glob("XineramaConfig*"))|
+                                      picker(mask=M_CONFIG_INFO,
+                                             string=glob("ClickTime")) )
+            self.info("pick: 1.1 got {}/1 packets out of {}",
+                      len(packs),len(self.packets))
+            packs = self.packets.pick(picker(mask=M_FOR_CONFIG,
+                                             string=glob("XineramaConfig*"))|
+                                      picker(mask=M_CONFIG_INFO,
+                                             string=glob("ClickTime*")) )
+            self.info("pick: 1.2 got {}/1 packets out of {}",
+                      len(packs),len(self.packets))
+            #######################################
+            self.info("pick: 2. timed out")
+            packs = self.packets.pick(picker(mask=M_STRING,
+                                             string=glob("NoSuchString*")),
+                                      timeout=1)
+            self.info("pick: 2. got {}/0 packets out of {}",
+                      len(packs),len(self.packets))
+            ########################################
+            self.info("pick: 3. keep=True")
+            self.info("pick: 3.1 keep=True")
+            packs = self.packets.pick(picker(string=glob("DesktopSize*")),keep=True)
+            self.info("pick: 3.1 got {}/1 packets out of {}",
+                      len(packs),len(self.packets))
+            self.info("pick: 3.2 keep=True")
+            packs = self.packets.pick(picker(string=glob("DesktopSize*")),keep=True)
+            self.info("pick: 3.2 got {}/1 packets out of {}",
+                      len(packs),len(self.packets))
+            ########################################
+            self.info("pick: 4. with until")
+            packs = self.packets.pick(picker(string=glob("colorset*")),
+                                      until=picker(mask=M_END_CONFIG_INFO),
+                                      keep=True)
+            self.info("pick: 4.1 got {}/many packets out of {}",
+                      len(packs),len(self.packets))
+            packs = self.packets.pick(picker(string=glob("colorset*")),
+                                      until=picker(mask=M_END_CONFIG_INFO))
+            self.info("pick: 4.2 got {}/many packets out of {}",
+                      len(packs),len(self.packets))
+            #######################################
+            self.packets.clear()
+            self.info("pick: {} packets in the queue",len(self.packets))
+            def fillq():
+                time.sleep(0.1)
+                self.sendmessage("Send_WindowList")
+                self.sendmessage("Send_ConfigInfo")
+                self.sendmessage("Send_WindowList")
+            ######################################
+            fillqt = threading.Thread(target=fillq)
+            self.packets.clear()
+            fillqt.start()
+            self.info("pick: 5. {} packets in the queue",len(self.packets))
+            packs = self.packets.pick(picker(mask=M_FOR_CONFIG,
+                                             string=glob("XineramaConfig*"))|
+                                      picker(mask=M_CONFIG_INFO,
+                                             string=glob("ClickTime*")) )
+            self.info("pick: 5.1 got {}/1 packets out of {}",
+                      len(packs),len(self.packets))
+            packs = self.packets.pick(picker(mask=M_FOR_CONFIG,
+                                             string=glob("XineramaConfig*"))|
+                                      picker(mask=M_CONFIG_INFO,
+                                             string=glob("ClickTime*")) )
+            self.info("pick: 5.2 got {}/1 packets out of {}",
+                      len(packs),len(self.packets))
+            #######################################
+            fillqt = threading.Thread(target=fillq)
+            self.packets.clear()
+            fillqt.start()
+            self.info("pick: 6. {} packets in the queue",len(self.packets))
+            self.info("pick: 6. timed out")
+            packs = self.packets.pick(picker(mask=M_STRING,
+                                             string=glob("NoSuchString*")),
+                                      timeout=1)
+            self.info("pick: 6. got {}/0 packets out of {}",
+                      len(packs),len(self.packets))
+            ########################################
+            fillqt = threading.Thread(target=fillq)
+            self.packets.clear()
+            fillqt.start()
+            self.info("pick: 7. {} packets in the queue",len(self.packets))
+            self.info("pick: 7. keep=True")
+            self.info("pick: 7.1 keep=True")
+            packs = self.packets.pick(picker(string=glob("DesktopSize*")),keep=True)
+            self.info("pick: 7.1 got {}/1 packets out of {}",
+                      len(packs),len(self.packets))
+            self.info("pick: 7.2 keep=True")
+            packs = self.packets.pick(picker(string=glob("DesktopSize*")),keep=True)
+            self.info("pick: 7.2 got {}/1 packets out of {}",
+                      len(packs),len(self.packets))
+            ########################################
+            fillqt = threading.Thread(target=fillq)
+            self.packets.clear()
+            fillqt.start()
+            self.info("pick: 8. {} packets in the queue",len(self.packets))
+            self.info("pick: 8. with until")
+            packs = self.packets.pick(picker(string=glob("colorset*")),
+                                      until=picker(mask=M_END_CONFIG_INFO),
+                                      keep=True)
+            self.info("pick: 8.1 got {}/many packets out of {}",
+                      len(packs),len(self.packets))
+            packs = self.packets.pick(picker(string=glob("colorset*")),
+                                      until=picker(mask=M_END_CONFIG_INFO))
+            self.info("pick: 8.2 got {}/many packets out of {}",
+                      len(packs),len(self.packets))
+            #######################################
             self.restore_masks()
-        elif cmd == "qsize":
-            self.info(" qsize: q size {}",len(self.packets))            
-        elif cmd == "winlist" or cmd == "getwinlist":
-            self.getwinlist()
-            with open("winlist.txt","wt") as file:
-                print(self.winlist,file=file)
         elif cmd == "exit":
             self.exit(0)
         elif cmd == "sendmessage":
@@ -180,7 +281,8 @@ m=fvwmmymod()
 m.logger.setLevel(L_INFO)
 m.packets.logger.setLevel(L_INFO)
 packet.logger.setLevel(L_INFO)
-m.mask = M_STRING | MX_REPLY | M_ERROR | M_FOR_CONFIG | MX_ENTER_WINDOW | M_FOR_WINLIST
+# m.mask = M_STRING | MX_REPLY | M_ERROR | M_FOR_CONFIG | MX_ENTER_WINDOW | M_FOR_WINLIST
+m.mask = M_STRING 
 m.syncmask     = 0
 m.nograbmask   = 0
 m.packfile = open('packfile.txt',"wt",buffering=1<<20)

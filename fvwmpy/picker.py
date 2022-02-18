@@ -2,11 +2,11 @@ import fnmatch
 
 ################################################################################
 ### some helpers
-# from .log import _getloggers
-
-# ( logger, debug, info,
-  # warn,   error, critical  ) = _getloggers('fvwmpy:picker')
-# logger.setLevel(L_ERROR)
+from .log import _getloggers
+from .constants import *
+( logger, debug, info,
+  warn,   error, critical  ) = _getloggers('fvwmpy:picker')
+logger.setLevel(L_WARN)
 ################################################################################
 
 class picker:
@@ -45,13 +45,14 @@ class picker:
     @classmethod
     def _picker_factory(cls, mask=None,**kwargs):
         def fcn(p):
+            debug("picker_fcn: working")
             if ( (mask is not None) and
                  (not p["ptype"] & mask) ):
-                # debug("Check {}=p['ptype'] ?= {}",
-                # bin(p.get("ptype")),bin(m))
+                debug("Check {}=p['ptype'] ?= {}",
+                      bin(p.get("ptype")),bin(mask))
                 return False
             for k,v in kwargs.items():
-                # debug("Check {}=p[{}] ?= {}",p.get(k),k,v)
+                debug("Check {}=p[{}] ?= {}",p.get(k),k,v)
                 if not ( k in p and p[k] == v ): return False
             return True
         return fcn
