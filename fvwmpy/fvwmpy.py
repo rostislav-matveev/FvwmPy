@@ -383,7 +383,7 @@ class fvwmpy:
                                           FINISHED) ) )
         self._tofvwm.flush()
         self.sendmessage_hook(msg, context_window, finished)
-        
+
     def finishedstartup(self):
         """
         Notify FVWM, that the module has finished configuring itself

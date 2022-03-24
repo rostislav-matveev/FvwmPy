@@ -7,3 +7,5 @@
 fvwmpy.egg-info/
 pyproject.toml
 setup.cfg
+examples/
+dist/

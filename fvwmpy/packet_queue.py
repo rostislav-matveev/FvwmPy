@@ -60,7 +60,7 @@ class _packet_queue:
                 self._queue.append(p)
                 ### Are we waiting for some special packet?
                 if self._spack_picker and self._spack_picker(p):
-                    ### Were waiting and packer arrived
+                    ### Were waiting and packet arrived
                     self.debug("threaded_reader: found special pack {}",p.name)
                     self._spack = (len(self._queue)-1, p)
                     self._spack_picker = None
@@ -80,7 +80,7 @@ class _packet_queue:
                 self._thread_exception = e
                 ### set events so there is no waiting in the main thread
                 ### main must now check and clear events
-                self._packet_picked.set()
+                self._spack_found.set()
                 self._nonempty.set()
             finally:
                 if self._lock.locked(): self._lock.release()
@@ -176,7 +176,7 @@ class _packet_queue:
             self.debug("check_exception: {} detected in the thread",repr(e))
             ### thread sets events for the main thread to proceed
             ### we have to clear, if necessary
-            self._packet_picked.clear()
+            self._spack_found.clear()
             if not self._queue:
                 self._nonempty.clear()
             raise e

@@ -98,6 +98,9 @@ class glob(str):
     
     __repr__ = __str__
 
+    # def __hash__(self):
+        # return super().__hash__()
+    
     def __eq__(self,other):
         return fnmatch.fnmatchcase(other.lower(),self.lower())
     
